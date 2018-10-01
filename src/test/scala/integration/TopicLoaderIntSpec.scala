@@ -7,27 +7,19 @@ import java.util.concurrent.{TimeoutException => JTimeoutException}
 
 import akka.Done
 import akka.actor.{ActorRef, ActorSystem}
+import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
-import akka.pattern.ask
 import akka.testkit.{TestActor, TestProbe}
 import akka.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option._
-import com.sky.kafka.topicloader.TopicLoader.{
-  LoadAll,
-  LoadCommitted,
-  LoadTopicStrategy
-}
-import com.sky.kafka.topicloader.{TopicLoader, TopicLoaderConfig}
+import com.sky.kafka.topicloader._
+import com.sky.kafka.{LoadAll, LoadCommitted, LoadTopicStrategy}
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.Codecs.stringSerializer
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
-import org.apache.kafka.clients.consumer.{
-  Consumer,
-  ConsumerConfig,
-  ConsumerRecord
-}
+import org.apache.kafka.clients.consumer._
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.{CommonClientConfigs, consumer}
 import org.apache.kafka.common.TopicPartition
@@ -305,6 +297,8 @@ class TopicLoaderIntSpec
            |        // can prove that our code overrides this value, so we can't accidentally & silently break at-least-once
            |        // functionality with bad config
            |        ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} = true
+           |        group.id = test-idzxcv-consumer-group
+           |        client.id = test-idzxcv-consumer-group
            |      }
            |    }
            |    producer.kafka-clients {
@@ -323,8 +317,6 @@ class TopicLoaderIntSpec
     def config(strategy: LoadTopicStrategy = LoadAll) =
       TopicLoaderConfig(strategy,
                         NonEmptyList.of(LoadStateTopic1, LoadStateTopic2),
-                        "testClientId",
-                        "testGroupId",
                         1.second)
 
     val LoadStateTopic1 = "load-state-topic-1"
@@ -334,10 +326,9 @@ class TopicLoaderIntSpec
 
     def loadTestTopic(strategy: LoadTopicStrategy,
                       f: ConsumerRecord[String, JLong] => Future[Option[Any]] =
-                        cr => Future.successful(cr.some)) = {
+                        cr => Future.successful(cr.some)) =
       TopicLoader(config(strategy), f, new LongDeserializer)
         .runWith(Sink.ignore)
-    }
 
     def createCustomTopics(topics: List[String], partitions: Int) =
       topics.foreach(createCustomTopic(_, partitions = partitions))
@@ -360,7 +351,7 @@ class TopicLoaderIntSpec
     var numRecordsLoaded = 0
 
     val storeRecord: ConsumerRecord[String, JLong] => Future[Option[Unit]] =
-      cr =>
+      _ =>
         Future
           .successful { numRecordsLoaded = numRecordsLoaded + 1 }
           .map(_.some)
@@ -402,7 +393,7 @@ class TopicLoaderIntSpec
         offsetReset: String): Consumer[String, lang.Long] = {
       val consumerCfg: Map[String, Object] = Map(
         ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG -> s"localhost:${kafkaConfig.kafkaPort}",
-        ConsumerConfig.GROUP_ID_CONFIG -> config().groupId,
+//        ConsumerConfig.GROUP_ID_CONFIG -> "test-consumer-group",
         ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG -> autoCommit.toString,
         ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> offsetReset
       )
