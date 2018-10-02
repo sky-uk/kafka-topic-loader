@@ -12,6 +12,7 @@ import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import com.sky.kafka.topicloader.TopicLoader.RunAfterSource
 
 class TopicLoaderSpec
     extends WordSpecLike

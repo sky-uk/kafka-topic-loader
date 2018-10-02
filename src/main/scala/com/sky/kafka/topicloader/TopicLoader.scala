@@ -23,13 +23,14 @@ import scala.util.{Failure, Success}
 
 object TopicLoader extends LazyLogging {
 
+  /**
+    * Consumes the records from the provided topics, passing them through `onRecord`
+    */
   def apply[T, Out](config: TopicLoaderConfig,
                     onRecord: ConsumerRecord[String, T] => Future[_],
                     valueDeserializer: Deserializer[T])(
       implicit system: ActorSystem,
-      ec: ExecutionContext
-  ): Source[Option[Out], _] = {
-
+      ec: ExecutionContext): Source[Option[Out], _] = {
 
     def topicPartition(topic: String) = new TopicPartition(topic, _: Int)
 
@@ -129,8 +130,7 @@ object TopicLoader extends LazyLogging {
     Source.single(Always(t)).map(_.value)
 
   private def withStandaloneConsumer[T, U](
-      settings: ConsumerSettings[String, T])(
-      f: Consumer[String, T] => U): U = {
+      settings: ConsumerSettings[String, T])(f: Consumer[String, T] => U): U = {
     val consumer = settings.createKafkaConsumer()
     try {
       f(consumer)
@@ -151,19 +151,28 @@ object TopicLoader extends LazyLogging {
   private implicit val showLogOffsets: Show[LogOffsets] = o =>
     s"LogOffsets(lowest = ${o.lowest}, highest = ${o.highest})"
 
-  implicit class PrependStream[T1, M1](val s1: Source[T1, M1]) extends AnyVal {
-    def runAfter[T2, M2](s2: Source[T2, M2]): Source[T1, KillSwitch] =
-      s1.map(Option.apply)
-        .concatLazy(s2.map(_ => None))
-        .collect { case Some(t) => t }
+  implicit class RunAfterSource[T1, M1](val s2: Source[T1, M1]) extends AnyVal {
+
+    /**
+      * Prepend s1 source to s2 source returning the source that will run them in order, after which the s1 Source
+      * ends and its result is discarded.
+      */
+    def runAfter[T2, M2](s1: Source[T2, M2]): Source[T1, KillSwitch] =
+      s2.map(collect(_))
+        .prependLazily(s1.map(_ => Process))
+        .collect { case Collect(t) => t }
         .viaMat(KillSwitches.single)(Keep.right)
 
-    def concatLazy[M2](s2: => Source[T1, M2]): Source[T1, NotUsed] =
-      Source(List(() => s2, () => s1)).flatMapConcat(_.apply)
+    def prependLazily[M2](s1: => Source[T1, M2]): Source[T1, NotUsed] =
+      Source(List(() => s1, () => s2)).flatMapConcat(_.apply)
   }
 
   private sealed trait RecordPosition
   private case object LessThanHighestOffset extends RecordPosition
   private case object LastRecordForPartition extends RecordPosition
 
+  private sealed trait Collectable[+T]
+  private case object Process extends Collectable[Nothing]
+  private final case class Collect[T](elem: T) extends Collectable[T]
+  private def collect[T](t: T): Collectable[T] = Collect(t)
 }

@@ -371,8 +371,7 @@ class TopicLoaderIntSpec
         countKafkaRecordsFromEarliestOffset(topic, autoCommit = false) should be <= amount
       }
 
-    def countKafkaRecordsFromEarliestOffset(topic: String, autoCommit: Boolean)/*(
-        implicit system: ActorSystem)*/: Int = {
+    def countKafkaRecordsFromEarliestOffset(topic: String, autoCommit: Boolean): Int = {
 
       val consumer = getConsumer(autoCommit, offsetReset = "earliest")
       val partitions = consumer
