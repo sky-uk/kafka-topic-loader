@@ -1,4 +1,4 @@
-package com.sky.kafka
+package com.sky.kafka.topicloader
 
 sealed trait LoadTopicStrategy
 final case object LoadAll extends LoadTopicStrategy

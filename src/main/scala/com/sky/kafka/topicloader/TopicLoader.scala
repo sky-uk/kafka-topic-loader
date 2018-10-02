@@ -11,7 +11,6 @@ import akka.stream.scaladsl.{Flow, Keep, Source}
 import akka.stream.{KillSwitch, KillSwitches}
 import cats.syntax.show._
 import cats.{Always, Show}
-import com.sky.kafka.{LoadAll, LoadCommitted}
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.serialization.{Deserializer, StringDeserializer}

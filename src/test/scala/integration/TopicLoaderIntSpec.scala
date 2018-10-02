@@ -16,7 +16,6 @@ import akka.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option._
 import com.sky.kafka.topicloader._
-import com.sky.kafka.{LoadAll, LoadCommitted, LoadTopicStrategy}
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.Codecs.stringSerializer
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
