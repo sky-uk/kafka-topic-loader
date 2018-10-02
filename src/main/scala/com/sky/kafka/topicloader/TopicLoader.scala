@@ -7,20 +7,18 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
-import akka.stream.{KillSwitch, KillSwitches}
 import akka.stream.scaladsl.{Flow, Keep, Source}
-import cats.data.{NonEmptyList, Reader}
-import cats.{Always, Show}
+import akka.stream.{KillSwitch, KillSwitches}
 import cats.syntax.show._
+import cats.{Always, Show}
 import com.sky.kafka.{LoadAll, LoadCommitted}
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.kafka.clients.consumer._
-import org.apache.kafka.common.{PartitionInfo, TopicPartition}
 import org.apache.kafka.common.serialization.{Deserializer, StringDeserializer}
+import org.apache.kafka.common.{PartitionInfo, TopicPartition}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration.FiniteDuration
 import scala.util.{Failure, Success}
 
 object TopicLoader extends LazyLogging {
@@ -39,8 +37,6 @@ object TopicLoader extends LazyLogging {
       ConsumerSettings(system, new StringDeserializer, valueDeserializer)
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-
-    settings.properties.foreach(x => println(">>>>>>" + x))
 
     val offsetsSource: Source[Map[TopicPartition, LogOffsets], NotUsed] =
       lazySource {

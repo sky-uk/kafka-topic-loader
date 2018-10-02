@@ -7,6 +7,7 @@ import java.util.concurrent.{TimeoutException => JTimeoutException}
 
 import akka.Done
 import akka.actor.{ActorRef, ActorSystem}
+import akka.kafka.ConsumerSettings
 import akka.pattern.ask
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
@@ -19,9 +20,9 @@ import com.sky.kafka.{LoadAll, LoadCommitted, LoadTopicStrategy}
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.Codecs.stringSerializer
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
+import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.clients.producer.ProducerConfig
-import org.apache.kafka.clients.{CommonClientConfigs, consumer}
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException
 import org.apache.kafka.common.serialization._
@@ -144,7 +145,6 @@ class TopicLoaderIntSpec
 
     "work when LOG-BEGINNING-OFFSETS is > 0 (e.g. has been reset)" in new TestContext
     with KafkaConsumer {
-      val consumerGroupId = "version-src-consumer"
       val records =
         (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
       val topicConfig =
@@ -360,7 +360,7 @@ class TopicLoaderIntSpec
   trait KafkaConsumer { this: TestContext =>
 
     def moveOffsetToEnd(topics: String*): Unit = {
-      val consumer = getConsumer(autoCommit = true, "latest")
+      val consumer = getConsumer(true, "latest")
       consumer.subscribe(topics.toList.asJava)
       consumer.poll(0)
       consumer.close()
@@ -371,8 +371,8 @@ class TopicLoaderIntSpec
         countKafkaRecordsFromEarliestOffset(topic, autoCommit = false) should be <= amount
       }
 
-    def countKafkaRecordsFromEarliestOffset(topic: String, autoCommit: Boolean)(
-        implicit system: ActorSystem): Int = {
+    def countKafkaRecordsFromEarliestOffset(topic: String, autoCommit: Boolean)/*(
+        implicit system: ActorSystem)*/: Int = {
 
       val consumer = getConsumer(autoCommit, offsetReset = "earliest")
       val partitions = consumer
@@ -382,7 +382,7 @@ class TopicLoaderIntSpec
 
       try {
         consumer.assign(partitions.asJava)
-        consumer.poll(5000).records(topic).asScala.size
+        consumer.poll(500).records(topic).asScala.size
       } finally {
         consumer.close()
       }
@@ -391,16 +391,13 @@ class TopicLoaderIntSpec
     private def getConsumer(
         autoCommit: Boolean,
         offsetReset: String): Consumer[String, lang.Long] = {
-      val consumerCfg: Map[String, Object] = Map(
-        ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG -> s"localhost:${kafkaConfig.kafkaPort}",
-//        ConsumerConfig.GROUP_ID_CONFIG -> "test-consumer-group",
-        ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG -> autoCommit.toString,
-        ConsumerConfig.AUTO_OFFSET_RESET_CONFIG -> offsetReset
-      )
 
-      new consumer.KafkaConsumer(consumerCfg.asJava,
-                                 new StringDeserializer,
-                                 new LongDeserializer)
+      val settings =
+        ConsumerSettings(system, new StringDeserializer, new LongDeserializer)
+          .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, autoCommit.toString)
+          .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, offsetReset)
+
+      settings.createKafkaConsumer()
     }
   }
 }

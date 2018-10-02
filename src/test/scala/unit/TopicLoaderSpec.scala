@@ -13,15 +13,22 @@ import org.scalatest.concurrent.ScalaFutures
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
-class TopicLoaderSpec extends WordSpecLike with Matchers with ScalaFutures with BeforeAndAfterAll {
+class TopicLoaderSpec
+    extends WordSpecLike
+    with Matchers
+    with ScalaFutures
+    with BeforeAndAfterAll {
 
   implicit val timeout = Timeout(5 seconds)
+  implicit val patientConfig = PatienceConfig(150 millis, 15 millis)
 
   "runAfter" should {
     "at startup run pre-start before the main source" in new TestContext {
-      val actorRef = system.actorOf(Props[SourceOrderingActor], "sourceTestActor")
+      val actorRef =
+        system.actorOf(Props[SourceOrderingActor], "sourceTestActor")
 
-      def assertState(expected: SourceOrder): Assertion = whenReady(actorRef ? GetState)(_ shouldBe expected)
+      def assertState(expected: SourceOrder): Assertion =
+        whenReady(actorRef ? GetState)(_ shouldBe expected)
 
       val preStartSrc = Source.fromIterator { () =>
         assertState(Uninitialized)
@@ -29,11 +36,13 @@ class TopicLoaderSpec extends WordSpecLike with Matchers with ScalaFutures with 
         List.empty.toIterator
       }
 
-      val mainSrc = Source.fromIterator { () =>
-        assertState(SourceA)
-        actorRef ! SourceB
-        List.empty.toIterator
-      }.viaMat(KillSwitches.single)(Keep.right)
+      val mainSrc = Source
+        .fromIterator { () =>
+          assertState(SourceA)
+          actorRef ! SourceB
+          List.empty.toIterator
+        }
+        .viaMat(KillSwitches.single)(Keep.right)
 
       whenReady(mainSrc.runAfter(preStartSrc).runWith(Sink.ignore)) { _ =>
         assertState(SourceB)
@@ -41,17 +50,27 @@ class TopicLoaderSpec extends WordSpecLike with Matchers with ScalaFutures with 
     }
 
     "die if second stream dies" in new TestContext {
-      failingSrc.runAfter(successfulSrc).runWith(Sink.ignore).failed.futureValue shouldBe an[Exception]
+      failingSrc
+        .runAfter(successfulSrc)
+        .runWith(Sink.ignore)
+        .failed
+        .futureValue shouldBe an[Exception]
     }
 
     "die if first stream dies" in new TestContext {
-      successfulSrc.runAfter(failingSrc).runWith(Sink.ignore).failed.futureValue shouldBe an[Exception]
+      successfulSrc
+        .runAfter(failingSrc)
+        .runWith(Sink.ignore)
+        .failed
+        .futureValue shouldBe an[Exception]
     }
   }
 
   private trait TestContext extends Suite with BeforeAndAfterAll {
-    val failingSrc    = Source.single("boom!").delay(10 millis).map(m => throw new Exception(m))
-    val successfulSrc = Source.single("hello").viaMat(KillSwitches.single)(Keep.right)
+    val failingSrc =
+      Source.single("boom!").delay(10 millis).map(m => throw new Exception(m))
+    val successfulSrc =
+      Source.single("hello").viaMat(KillSwitches.single)(Keep.right)
 
     implicit lazy val system: ActorSystem =
       ActorSystem(
@@ -80,9 +99,9 @@ class TopicLoaderSpec extends WordSpecLike with Matchers with ScalaFutures with 
 
 sealed trait SourceOrder
 case object Uninitialized extends SourceOrder
-case object SourceA       extends SourceOrder
-case object SourceB       extends SourceOrder
-case object GetState      extends SourceOrder
+case object SourceA extends SourceOrder
+case object SourceB extends SourceOrder
+case object GetState extends SourceOrder
 
 class SourceOrderingActor extends Actor {
   override def receive: Receive = storeOrder(Uninitialized)
