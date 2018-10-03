@@ -1,7 +1,7 @@
 # kafka-topic-loader
-Loads the state of a kafka topics to populate your application on startup
+Loads the state of Kafka topics to populate your application on startup
 
-```
+```scala
 libraryLibraries += "com.sky" %% "kafka-topic-loader" % "0.1.0-SNAPSHOT"
 ```
 
@@ -16,7 +16,7 @@ def stream: Stream[Out] =
       .runAfter(TopicLoader(LoadCommitted, topics, storeRecords, deserializer, 2 minutes))
 ```
 
-## Configuring your `group.id`
+## Configuring your consumer group.id
 
 You should configure the `akka.kafka.consumer.kafka-clients.group.id` to match that of your application.
 This is especially important for the `LoadCommitted` version of `LoadTopicStrategy` to correctly
@@ -24,7 +24,7 @@ read up to the correct offset.
 
 e.g
 ```
-kafka {
+akka.kafka {
   consumer.kafka-clients {
     bootstrap.servers = ${?KAFKA_BROKERS}
     group.id = assembler-consumer-group
@@ -33,5 +33,4 @@ kafka {
     bootstrap.servers = ${?KAFKA_BROKERS}
   }
 }
-
 ```
