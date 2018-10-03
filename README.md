@@ -8,12 +8,14 @@ libraryDependencies += "com.sky" %% "kafka-topic-loader" % "0.1.0-SNAPSHOT"
 ```scala
 import com.sky.kafka.topicloader.TopicLoader.RunAfterSource     // for #runAfter
 
-val storeRecords: ConsumerRecord[String, SourceEntity] => Future[AssembledEntity] = ???
+val topicLoaderConfig = TopicLoaderConfig(LoadAll, topics, 2.minutes, parallelism = 2)
+val storeRecords: ConsumerRecord[String, SourceEntity] => Future[AssembledEntity] = {/* store records in akka.Actor */}
 
 def stream: Stream[Out] =
     fromSource
       .via(assemble)
-      .runAfter(TopicLoader(LoadCommitted, topics, storeRecords, deserializer, 2 minutes))
+      .runAfter(TopicLoader(topicLoaderConfig, storeRecords, new LongDeserializer))
+
 ```
 
 ## Configuring your consumer group.id
