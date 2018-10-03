@@ -9,7 +9,10 @@ libraryDependencies += "com.sky" %% "kafka-topic-loader" % "0.1.0-SNAPSHOT"
 import com.sky.kafka.topicloader.TopicLoader.RunAfterSource     // for #runAfter
 
 val topicLoaderConfig = TopicLoaderConfig(LoadAll, topics, 2.minutes, parallelism = 2)
-val storeRecords: ConsumerRecord[String, SourceEntity] => Future[AssembledEntity] = {/* store records in akka.Actor */}
+
+val storeRecords: ConsumerRecord[String, SourceEntity] => Future[AssembledEntity] = {
+    /* store records in akka.Actor */
+}
 
 def stream: Stream[Out] =
     fromSource
