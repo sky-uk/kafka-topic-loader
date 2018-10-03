@@ -1,3 +1,4 @@
+import Aliases._
 import Bintray._
 import BuildInfo._
 import Release._
@@ -5,6 +6,7 @@ import Release._
 lazy val root = (project in file("."))
   .enablePlugins(BuildInfoPlugin, JavaAppPackaging, UniversalDeployPlugin)
   .settings(
+    defineCommandAliases,
     organization := "com.sky",
     scalaVersion := "2.12.6",
     version := "0.1.0-SNAPSHOT",
