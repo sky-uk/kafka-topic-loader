@@ -1,4 +1,3 @@
-import com.typesafe.sbt.packager.universal.UniversalPlugin.autoImport.Universal
 import sbt.Keys._
 import sbt.taskKey
 import sbtrelease.ReleasePlugin.autoImport._
@@ -20,6 +19,7 @@ object Release {
       releaseStepCommand(ExtraReleaseCommands.initialVcsChecksCommand),
       inquireVersions,
       setReleaseVersion,
+      runClean,
       runTest,
       commitReleaseVersion,
       tagRelease,
