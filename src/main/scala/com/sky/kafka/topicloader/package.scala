@@ -13,7 +13,7 @@ package object topicloader {
       * ends and its result is discarded.
       */
     def runAfter[T2, M2](s1: Source[T2, M2]): Source[T1, KillSwitch] =
-      s2.map(emit(_))
+      s2.map(EventAction(_))
         .prependLazily(s1.map(_ => Ignore))
         .collect { case Emit(t) => t }
         .viaMat(KillSwitches.single)(Keep.right)
@@ -25,5 +25,7 @@ package object topicloader {
   private sealed trait EventAction[+T]
   private case object Ignore                extends EventAction[Nothing]
   private final case class Emit[T](elem: T) extends EventAction[T]
-  private def emit[T](t: T): EventAction[T] = Emit(t)
+  private object EventAction {
+    def apply[T](value: T): EventAction[T] = Emit(value)
+  }
 }
