@@ -1,23 +1,19 @@
 package integration
 
-import java.lang
-import java.lang.{Long => JLong}
 import java.util.UUID
 
 import akka.Done
 import akka.actor.{ActorRef, ActorSystem}
 import akka.kafka.ConsumerSettings
 import akka.pattern.ask
-import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import akka.testkit.{TestActor, TestProbe}
 import akka.util.Timeout
-import base.WordSpecBase
+import base.{AkkaSpecBase, WordSpecBase}
 import cats.data.NonEmptyList
 import cats.syntax.option._
 import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
-import net.manub.embeddedkafka.Codecs.stringSerializer
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer._
@@ -25,14 +21,13 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException
 import org.apache.kafka.common.serialization._
-import org.scalatest.Suite
 import org.scalatest.concurrent.Eventually
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
 import utils.RandomPort
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class TopicLoaderIntSpec extends WordSpecBase with Eventually {
@@ -44,7 +39,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     "update store records with entire state of provided topics using full log strategy" in new TestContext
     with CountingRecordStore {
       val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
+        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
 
       withRunningKafka {
         createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
@@ -59,7 +54,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     "update store records with state of provided topics using last consumer commit strategy" in new TestContext
     with KafkaConsumer with CountingRecordStore {
       val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
+        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
 
       withRunningKafka {
         createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
@@ -75,7 +70,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     "update store records when one of state topics is empty for load all strategy" in new TestContext with KafkaConsumer
     with CountingRecordStore {
       val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
+        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
 
       withRunningKafka {
         createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
@@ -89,7 +84,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     "update store records when one of state topics is empty for load committed strategy" in new TestContext
     with KafkaConsumer with CountingRecordStore {
       val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
+        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
 
       withRunningKafka {
         createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
@@ -113,7 +108,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     "read always from LOG-BEGINNING-OFFSETS" in new TestContext with KafkaConsumer {
       val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
+        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
 
       forEvery(loadStrategy) { strategy =>
         withRunningKafka {
@@ -130,7 +125,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     "work when LOG-BEGINNING-OFFSETS is > 0 (e.g. has been reset)" in new TestContext with KafkaConsumer {
       val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
+        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
       val topicConfig =
         Map("cleanup.policy" -> "delete", "retention.ms" -> "10")
 
@@ -193,12 +188,12 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
       val result = withRunningKafka {
         val records =
-          (1 to 5).toList.map(UUID.randomUUID().toString -> Long.box(_))
+          (1 to 5).toList.map(UUID.randomUUID().toString -> _.toString)
 
         createCustomTopic(LoadStateTopic1, partitions = 12)
         publishToKafka(LoadStateTopic1, records)
 
-        val callSlowProbe: ConsumerRecord[String, JLong] => Future[Option[ConsumerRecord[String, JLong]]] =
+        val callSlowProbe: ConsumerRecord[String, String] => Future[Option[ConsumerRecord[String, String]]] =
           cr => (slowProbe.ref ? 123).map(_ => cr.some)
 
         val res = loadTestTopic(LoadAll, callSlowProbe)
@@ -229,8 +224,6 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
           )
         )
 
-
-
       withRunningKafka {
         createCustomTopic(LoadStateTopic1, partitions = 5)
         loadTestTopic(LoadAll).failed.futureValue shouldBe a[TimeoutException]
@@ -239,28 +232,28 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     "fail when store record is unsuccessful" in new TestContext {
       val boom = new Exception("boom!")
-      val failingHandler: ConsumerRecord[String, JLong] => Future[Option[Unit]] =
+      val failingHandler: ConsumerRecord[String, String] => Future[Option[Unit]] =
         _ => Future.failed(boom)
 
       withRunningKafka {
         createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
 
-        publishToKafka(LoadStateTopic1, List(UUID.randomUUID().toString -> Long.box(1)))
+        publishToKafka(LoadStateTopic1, List(UUID.randomUUID().toString -> "1"))
 
         loadTestTopic(LoadAll, failingHandler).failed.futureValue shouldBe boom
       }
     }
   }
 
-  trait TestContext extends EmbeddedKafka with Suite {
+  trait TestContext extends AkkaSpecBase with EmbeddedKafka {
 
-    implicit val timeout        = Timeout(5 seconds)
-    implicit val longSerializer = new LongSerializer
+    implicit val timeout          = Timeout(5 seconds)
+    implicit val stringSerializer = new StringSerializer
 
     implicit lazy val kafkaConfig =
       EmbeddedKafkaConfig(kafkaPort = RandomPort(), zooKeeperPort = RandomPort(), Map("log.roll.ms" -> "10"))
 
-    implicit lazy val system: ActorSystem = ActorSystem(
+    override implicit lazy val system: ActorSystem = ActorSystem(
       name = s"test-actor-system-${UUID.randomUUID().toString}",
       config = ConfigFactory.parseString(
         s"""
@@ -290,9 +283,6 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       )
     )
 
-    implicit lazy val ec: ExecutionContext = system.dispatcher
-    implicit lazy val mat: ActorMaterializer = ActorMaterializer()
-
     def config(strategy: LoadTopicStrategy = LoadAll) =
       TopicLoaderConfig(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), 1.second)
 
@@ -302,8 +292,8 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     val loadStrategy = Table("strategy", LoadAll, LoadCommitted)
 
     def loadTestTopic(strategy: LoadTopicStrategy,
-                      f: ConsumerRecord[String, JLong] => Future[Option[Any]] = cr => Future.successful(cr.some)) =
-      TopicLoader(config(strategy), f, new LongDeserializer)
+                      f: ConsumerRecord[String, String] => Future[Option[Any]] = cr => Future.successful(cr.some)) =
+      TopicLoader(config(strategy), f, new StringDeserializer)
         .runWith(Sink.ignore)
 
     def createCustomTopics(topics: List[String], partitions: Int) =
@@ -326,7 +316,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
   trait CountingRecordStore { this: TestContext =>
     var numRecordsLoaded = 0
 
-    val storeRecord: ConsumerRecord[String, JLong] => Future[Option[Unit]] =
+    val storeRecord: ConsumerRecord[String, String] => Future[Option[Unit]] =
       _ =>
         Future.successful { numRecordsLoaded = numRecordsLoaded + 1 }
           .map(_.some)
@@ -362,10 +352,10 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       }
     }
 
-    private def getConsumer(autoCommit: Boolean, offsetReset: String): Consumer[String, lang.Long] = {
+    private def getConsumer(autoCommit: Boolean, offsetReset: String): Consumer[String, String] = {
 
       val settings =
-        ConsumerSettings(system, new StringDeserializer, new LongDeserializer)
+        ConsumerSettings(system, new StringDeserializer, new StringDeserializer)
           .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, autoCommit.toString)
           .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, offsetReset)
 

@@ -25,8 +25,8 @@ object TopicLoader extends LazyLogging {
     * Consumes the records from the provided topics, passing them through `onRecord`.
     */
   def apply[T](config: TopicLoaderConfig,
-                    onRecord: ConsumerRecord[String, T] => Future[_],
-                    valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Option[_], _] = {
+               onRecord: ConsumerRecord[String, T] => Future[_],
+               valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Option[_], _] = {
 
     import system.dispatcher
 

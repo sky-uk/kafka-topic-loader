@@ -3,21 +3,21 @@ import java.util.UUID
 
 import akka.actor.{Actor, ActorSystem, Props}
 import akka.pattern.ask
+import akka.stream.KillSwitches
 import akka.stream.scaladsl.{Keep, Sink, Source}
-import akka.stream.{ActorMaterializer, KillSwitches}
 import akka.util.Timeout
 import base.{AkkaSpecBase, WordSpecBase}
 import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
 import org.scalatest._
+import unit.SourceOrderingActor._
 
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 class TopicLoaderSpec extends WordSpecBase {
 
-  implicit val timeout       = Timeout(5 seconds)
-  implicit val patientConfig = PatienceConfig(150 millis, 15 millis)
+  implicit val timeout = Timeout(5 seconds)
+  implicit val pc      = PatienceConfig(150 millis, 15 millis)
 
   "runAfter" should {
     "at startup run pre-start before the main source" in new TestContext {
@@ -67,7 +67,7 @@ class TopicLoaderSpec extends WordSpecBase {
     val successfulSrc =
       Source.single("hello").viaMat(KillSwitches.single)(Keep.right)
 
-    implicit lazy val system: ActorSystem =
+    override implicit lazy val system: ActorSystem =
       ActorSystem(
         name = s"test-actor-system-${UUID.randomUUID().toString}",
         config = ConfigFactory.parseString {
@@ -81,19 +81,12 @@ class TopicLoaderSpec extends WordSpecBase {
           """.stripMargin
         }
       )
-
-    implicit lazy val ec: ExecutionContext   = system.dispatcher
-    implicit lazy val mat: ActorMaterializer = ActorMaterializer()
   }
 }
 
-sealed trait SourceOrder
-case object Uninitialized extends SourceOrder
-case object SourceA       extends SourceOrder
-case object SourceB       extends SourceOrder
-case object GetState      extends SourceOrder
-
 class SourceOrderingActor extends Actor {
+  import SourceOrderingActor._
+
   override def receive: Receive = storeOrder(Uninitialized)
 
   def storeOrder(order: SourceOrder): Receive = {
@@ -102,4 +95,12 @@ class SourceOrderingActor extends Actor {
     case SourceB       => context become storeOrder(SourceB)
     case GetState      => sender ! order
   }
+}
+
+object SourceOrderingActor {
+  sealed trait SourceOrder
+  case object Uninitialized extends SourceOrder
+  case object SourceA       extends SourceOrder
+  case object SourceB       extends SourceOrder
+  case object GetState      extends SourceOrder
 }
