@@ -10,13 +10,13 @@ import com.sky.kafka.topicloader.TopicLoader.RunAfterSource     // for #runAfter
 
 val topicLoaderConfig = TopicLoaderConfig(LoadAll, topics, 2.minutes, parallelism = 2)
 
-val storeRecords: ConsumerRecord[String, SourceEntity] => Future[AssembledEntity] = {
+val storeRecords: ConsumerRecord[String, SourceEntity] => Future[BusinessEntity] = {
     /* store records in akka.Actor */
 }
 
 def stream: Stream[Out] =
     fromSource
-      .via(assemble)
+      .via(businessLogic)
       .runAfter(TopicLoader(topicLoaderConfig, storeRecords, new LongDeserializer))
 
 ```

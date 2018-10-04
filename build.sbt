@@ -1,3 +1,4 @@
+import com.lucidchart.sbt.scalafmt.ScalafmtCorePlugin.autoImport._
 import Aliases._
 import Bintray._
 import BuildInfo._
@@ -26,6 +27,8 @@ lazy val root = (project in file("."))
       "-feature",
       "-Ypartial-unification"
     ),
+    scalafmtVersion := "1.2.0",
+    scalafmtOnCompile := sys.env.getOrElse("RUN_SCALAFMT_ON_COMPILE", "false").toBoolean,
     libraryDependencies ++= Dependencies.deps,
     buildInfoSettings,
     releaseSettings,

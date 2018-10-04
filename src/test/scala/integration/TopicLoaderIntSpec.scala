@@ -3,7 +3,6 @@ package integration
 import java.lang
 import java.lang.{Long => JLong}
 import java.util.UUID
-import java.util.concurrent.{TimeoutException => JTimeoutException}
 
 import akka.Done
 import akka.actor.{ActorRef, ActorSystem}
@@ -13,6 +12,7 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import akka.testkit.{TestActor, TestProbe}
 import akka.util.Timeout
+import base.WordSpecBase
 import cats.data.NonEmptyList
 import cats.syntax.option._
 import com.sky.kafka.topicloader._
@@ -25,21 +25,17 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException
 import org.apache.kafka.common.serialization._
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.Suite
+import org.scalatest.concurrent.Eventually
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
-import org.scalatest.{Matchers, Suite, WordSpecLike}
 import utils.RandomPort
 
 import scala.collection.JavaConverters._
-import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 
-class TopicLoaderIntSpec
-    extends WordSpecLike
-    with Matchers
-    with ScalaFutures
-    with Eventually {
+class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
   override implicit val patienceConfig = PatienceConfig(5.seconds, 100.millis)
 
@@ -51,14 +47,12 @@ class TopicLoaderIntSpec
         (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
 
       withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2),
-                           partitions = 5)
+        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
 
         publishToKafka(LoadStateTopic1, records)
         publishToKafka(LoadStateTopic2, records)
 
-        whenReady(loadTestTopic(LoadAll, storeRecord))(_ =>
-          numRecordsLoaded shouldBe 30)
+        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded shouldBe 30)
       }
     }
 
@@ -68,31 +62,27 @@ class TopicLoaderIntSpec
         (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
 
       withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2),
-                           partitions = 5)
+        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
 
         publishToKafka(LoadStateTopic1, records.take(11))
         moveOffsetToEnd(LoadStateTopic1)
         publishToKafka(LoadStateTopic1, records.takeRight(4))
 
-        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ =>
-          numRecordsLoaded shouldBe 11)
+        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded shouldBe 11)
       }
     }
 
-    "update store records when one of state topics is empty for load all strategy" in new TestContext
-    with KafkaConsumer with CountingRecordStore {
+    "update store records when one of state topics is empty for load all strategy" in new TestContext with KafkaConsumer
+    with CountingRecordStore {
       val records =
         (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
 
       withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2),
-                           partitions = 5)
+        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
 
         publishToKafka(LoadStateTopic1, records)
 
-        whenReady(loadTestTopic(LoadAll, storeRecord))(_ =>
-          numRecordsLoaded shouldBe 15)
+        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded shouldBe 15)
       }
     }
 
@@ -102,14 +92,12 @@ class TopicLoaderIntSpec
         (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
 
       withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2),
-                           partitions = 5)
+        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
 
         publishToKafka(LoadStateTopic1, records)
         moveOffsetToEnd(LoadStateTopic1)
 
-        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ =>
-          numRecordsLoaded shouldBe 15)
+        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded shouldBe 15)
       }
     }
 
@@ -123,8 +111,7 @@ class TopicLoaderIntSpec
       }
     }
 
-    "read always from LOG-BEGINNING-OFFSETS" in new TestContext
-    with KafkaConsumer {
+    "read always from LOG-BEGINNING-OFFSETS" in new TestContext with KafkaConsumer {
       val records =
         (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
 
@@ -133,8 +120,7 @@ class TopicLoaderIntSpec
           createCustomTopic(LoadStateTopic1, partitions = 5)
           publishToKafka(LoadStateTopic1, records)
 
-          val count = countKafkaRecordsFromEarliestOffset(LoadStateTopic1,
-                                                          autoCommit = true)
+          val count = countKafkaRecordsFromEarliestOffset(LoadStateTopic1, autoCommit = true)
           count shouldBe records.size
 
           loadTestTopic(strategy).futureValue shouldBe Done
@@ -142,8 +128,7 @@ class TopicLoaderIntSpec
       }
     }
 
-    "work when LOG-BEGINNING-OFFSETS is > 0 (e.g. has been reset)" in new TestContext
-    with KafkaConsumer {
+    "work when LOG-BEGINNING-OFFSETS is > 0 (e.g. has been reset)" in new TestContext with KafkaConsumer {
       val records =
         (1 to 15).toList.map(UUID.randomUUID().toString -> Long.box(_))
       val topicConfig =
@@ -182,8 +167,7 @@ class TopicLoaderIntSpec
       loadTestTopic(LoadAll).failed.futureValue shouldBe a[TimeoutException]
     }
 
-    "fail the source if Kafka goes down during processing" in new TestContext
-    with DelayedProbe {
+    "fail the source if Kafka goes down during processing" in new TestContext with DelayedProbe {
 
       override implicit lazy val system: ActorSystem = ActorSystem(
         "test-actor-system",
@@ -214,8 +198,7 @@ class TopicLoaderIntSpec
         createCustomTopic(LoadStateTopic1, partitions = 12)
         publishToKafka(LoadStateTopic1, records)
 
-        val callSlowProbe: ConsumerRecord[String, JLong] => Future[
-          Option[ConsumerRecord[String, JLong]]] =
+        val callSlowProbe: ConsumerRecord[String, JLong] => Future[Option[ConsumerRecord[String, JLong]]] =
           cr => (slowProbe.ref ? 123).map(_ => cr.some)
 
         val res = loadTestTopic(LoadAll, callSlowProbe)
@@ -224,7 +207,8 @@ class TopicLoaderIntSpec
 
         res
       }
-      result.failed.futureValue shouldBe a[JTimeoutException]
+
+      result.failed.futureValue shouldBe a[java.util.concurrent.TimeoutException]
     }
 
     "fail when Kafka is too slow for client to start" in new TestContext {
@@ -245,6 +229,8 @@ class TopicLoaderIntSpec
           )
         )
 
+
+
       withRunningKafka {
         createCustomTopic(LoadStateTopic1, partitions = 5)
         loadTestTopic(LoadAll).failed.futureValue shouldBe a[TimeoutException]
@@ -253,16 +239,13 @@ class TopicLoaderIntSpec
 
     "fail when store record is unsuccessful" in new TestContext {
       val boom = new Exception("boom!")
-      val failingHandler
-        : ConsumerRecord[String, JLong] => Future[Option[Unit]] =
+      val failingHandler: ConsumerRecord[String, JLong] => Future[Option[Unit]] =
         _ => Future.failed(boom)
 
       withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2),
-                           partitions = 5)
+        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
 
-        publishToKafka(LoadStateTopic1,
-                       List(UUID.randomUUID().toString -> Long.box(1)))
+        publishToKafka(LoadStateTopic1, List(UUID.randomUUID().toString -> Long.box(1)))
 
         loadTestTopic(LoadAll, failingHandler).failed.futureValue shouldBe boom
       }
@@ -271,13 +254,11 @@ class TopicLoaderIntSpec
 
   trait TestContext extends EmbeddedKafka with Suite {
 
-    implicit val timeout = Timeout(5 seconds)
+    implicit val timeout        = Timeout(5 seconds)
     implicit val longSerializer = new LongSerializer
 
     implicit lazy val kafkaConfig =
-      EmbeddedKafkaConfig(kafkaPort = RandomPort(),
-                          zooKeeperPort = RandomPort(),
-                          Map("log.roll.ms" -> "10"))
+      EmbeddedKafkaConfig(kafkaPort = RandomPort(), zooKeeperPort = RandomPort(), Map("log.roll.ms" -> "10"))
 
     implicit lazy val system: ActorSystem = ActorSystem(
       name = s"test-actor-system-${UUID.randomUUID().toString}",
@@ -296,8 +277,7 @@ class TopicLoaderIntSpec
            |        // can prove that our code overrides this value, so we can't accidentally & silently break at-least-once
            |        // functionality with bad config
            |        ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} = true
-           |        group.id = test-idzxcv-consumer-group
-           |        client.id = test-idzxcv-consumer-group
+           |        group.id = test-consumer-group
            |      }
            |    }
            |    producer.kafka-clients {
@@ -314,9 +294,7 @@ class TopicLoaderIntSpec
     implicit lazy val mat: ActorMaterializer = ActorMaterializer()
 
     def config(strategy: LoadTopicStrategy = LoadAll) =
-      TopicLoaderConfig(strategy,
-                        NonEmptyList.of(LoadStateTopic1, LoadStateTopic2),
-                        1.second)
+      TopicLoaderConfig(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), 1.second)
 
     val LoadStateTopic1 = "load-state-topic-1"
     val LoadStateTopic2 = "load-state-topic-2"
@@ -324,8 +302,7 @@ class TopicLoaderIntSpec
     val loadStrategy = Table("strategy", LoadAll, LoadCommitted)
 
     def loadTestTopic(strategy: LoadTopicStrategy,
-                      f: ConsumerRecord[String, JLong] => Future[Option[Any]] =
-                        cr => Future.successful(cr.some)) =
+                      f: ConsumerRecord[String, JLong] => Future[Option[Any]] = cr => Future.successful(cr.some)) =
       TopicLoader(config(strategy), f, new LongDeserializer)
         .runWith(Sink.ignore)
 
@@ -351,15 +328,14 @@ class TopicLoaderIntSpec
 
     val storeRecord: ConsumerRecord[String, JLong] => Future[Option[Unit]] =
       _ =>
-        Future
-          .successful { numRecordsLoaded = numRecordsLoaded + 1 }
+        Future.successful { numRecordsLoaded = numRecordsLoaded + 1 }
           .map(_.some)
   }
 
   trait KafkaConsumer { this: TestContext =>
 
     def moveOffsetToEnd(topics: String*): Unit = {
-      val consumer = getConsumer(true, "latest")
+      val consumer = getConsumer(autoCommit = true, "latest")
       consumer.subscribe(topics.toList.asJava)
       consumer.poll(0)
       consumer.close()
@@ -386,9 +362,7 @@ class TopicLoaderIntSpec
       }
     }
 
-    private def getConsumer(
-        autoCommit: Boolean,
-        offsetReset: String): Consumer[String, lang.Long] = {
+    private def getConsumer(autoCommit: Boolean, offsetReset: String): Consumer[String, lang.Long] = {
 
       val settings =
         ConsumerSettings(system, new StringDeserializer, new LongDeserializer)

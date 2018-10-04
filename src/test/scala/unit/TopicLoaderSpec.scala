@@ -3,24 +3,20 @@ import java.util.UUID
 
 import akka.actor.{Actor, ActorSystem, Props}
 import akka.pattern.ask
-import akka.stream.{ActorMaterializer, KillSwitches}
 import akka.stream.scaladsl.{Keep, Sink, Source}
+import akka.stream.{ActorMaterializer, KillSwitches}
 import akka.util.Timeout
+import base.{AkkaSpecBase, WordSpecBase}
+import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
 import org.scalatest._
-import org.scalatest.concurrent.ScalaFutures
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
-import com.sky.kafka.topicloader.TopicLoader.RunAfterSource
 
-class TopicLoaderSpec
-    extends WordSpecLike
-    with Matchers
-    with ScalaFutures
-    with BeforeAndAfterAll {
+class TopicLoaderSpec extends WordSpecBase {
 
-  implicit val timeout = Timeout(5 seconds)
+  implicit val timeout       = Timeout(5 seconds)
   implicit val patientConfig = PatienceConfig(150 millis, 15 millis)
 
   "runAfter" should {
@@ -37,13 +33,11 @@ class TopicLoaderSpec
         List.empty.toIterator
       }
 
-      val mainSrc = Source
-        .fromIterator { () =>
-          assertState(SourceA)
-          actorRef ! SourceB
-          List.empty.toIterator
-        }
-        .viaMat(KillSwitches.single)(Keep.right)
+      val mainSrc = Source.fromIterator { () =>
+        assertState(SourceA)
+        actorRef ! SourceB
+        List.empty.toIterator
+      }.viaMat(KillSwitches.single)(Keep.right)
 
       whenReady(mainSrc.runAfter(preStartSrc).runWith(Sink.ignore)) { _ =>
         assertState(SourceB)
@@ -67,7 +61,7 @@ class TopicLoaderSpec
     }
   }
 
-  private trait TestContext extends Suite with BeforeAndAfterAll {
+  private trait TestContext extends AkkaSpecBase {
     val failingSrc =
       Source.single("boom!").delay(10 millis).map(m => throw new Exception(m))
     val successfulSrc =
@@ -88,21 +82,16 @@ class TopicLoaderSpec
         }
       )
 
-    implicit lazy val ec: ExecutionContext = system.dispatcher
+    implicit lazy val ec: ExecutionContext   = system.dispatcher
     implicit lazy val mat: ActorMaterializer = ActorMaterializer()
-
-    override def afterAll(): Unit = {
-      super.afterAll()
-      mat.shutdown()
-    }
   }
 }
 
 sealed trait SourceOrder
 case object Uninitialized extends SourceOrder
-case object SourceA extends SourceOrder
-case object SourceB extends SourceOrder
-case object GetState extends SourceOrder
+case object SourceA       extends SourceOrder
+case object SourceB       extends SourceOrder
+case object GetState      extends SourceOrder
 
 class SourceOrderingActor extends Actor {
   override def receive: Receive = storeOrder(Uninitialized)
