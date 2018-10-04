@@ -2,7 +2,7 @@
 Loads the state of Kafka topics to populate your application on startup
 
 ```scala
-libraryDependencies += "com.sky" %% "kafka-topic-loader" % "1.0.0"
+libraryDependencies += "com.sky" %% "kafka-topic-loader" % "0.1.0-SNAPSHOT"
 ```
 
 ```scala

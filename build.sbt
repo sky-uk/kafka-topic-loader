@@ -10,7 +10,7 @@ lazy val root = (project in file("."))
     defineCommandAliases,
     organization := "com.sky",
     scalaVersion := "2.12.6",
-    version := "1.0.0",
+    version := "0.1.0-SNAPSHOT",
     name := "kafka-topic-loader",
     resolvers += Resolver.bintrayRepo("cakesolutions", "maven"),
     scalacOptions ++= Seq(
