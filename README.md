@@ -1,8 +1,11 @@
 # kafka-topic-loader
 Loads the state of Kafka topics to populate your application on startup
 
+You should add the following to your `build.sbt`:
 ```scala
 libraryDependencies += "com.sky" %% "kafka-topic-loader" % "1.0.0"
+
+resolvers += "bintray-sky-uk-oss-maven" at "https://dl.bintray.com/sky-uk/oss-maven"
 ```
 
 ```scala
