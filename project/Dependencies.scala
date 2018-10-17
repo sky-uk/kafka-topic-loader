@@ -2,8 +2,9 @@ import sbt._
 
 object Dependencies {
 
-  val AkkaVersion = "2.5.10"
-  val CatsVersion = "1.4.0"
+  val AkkaVersion    = "2.5.10"
+  val CatsVersion    = "1.4.0"
+  val RefinedVersion = "0.9.0"
 
   // @formatter:off
   lazy val deps = Seq(
@@ -15,6 +16,8 @@ object Dependencies {
     "com.typesafe.scala-logging"  %% "scala-logging"            % "3.7.2",
     "org.typelevel"               %% "cats-core"                % CatsVersion,
     "org.typelevel"               %% "cats-kernel"              % CatsVersion,
+    "eu.timepit"                  %% "refined"                  % RefinedVersion,
+    "eu.timepit"                  %% "refined-pureconfig"       % RefinedVersion,
     "net.manub"                   %% "scalatest-embedded-kafka" % "1.1.0"       % Test
   )
   // @formatter:on
