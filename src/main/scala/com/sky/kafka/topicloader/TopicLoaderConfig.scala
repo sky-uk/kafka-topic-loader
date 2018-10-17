@@ -1,8 +1,9 @@
 package com.sky.kafka.topicloader
 
 import cats.data.NonEmptyList
-import com.sun.tools.corba.se.idl.constExpr.Positive
 import eu.timepit.refined.api.Refined
+import eu.timepit.refined.auto._
+import eu.timepit.refined.numeric.Positive
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -23,4 +24,4 @@ final case class TopicLoaderConfig(strategy: LoadTopicStrategy,
                                    topics: NonEmptyList[String],
                                    bufferSize: Int Refined Positive,
                                    idleTimeout: FiniteDuration,
-                                   parallelism: Int Refined Positive)
+                                   parallelism: Int Refined Positive = 1)
