@@ -7,6 +7,7 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
+import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Flow, Source}
 import cats.syntax.show._
 import cats.{Always, Show}
@@ -98,9 +99,10 @@ object TopicLoader extends LazyLogging {
         case _ =>
           Consumer
             .plainSource(settings, Subscriptions.assignmentWithOffset(lowestOffsets))
+            .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
             .idleTimeout(config.idleTimeout)
             .via(filterBelowHighestOffset)
-            .mapAsync(config.parallelism)(handleRecord)
+            .mapAsync(config.parallelism.value)(handleRecord)
             .collect {
               case (r, LastRecordForPartition) =>
                 logger.info(s"Finished loading data from ${r.topic}-${r.partition}")
