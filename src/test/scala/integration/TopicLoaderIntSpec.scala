@@ -25,6 +25,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
 import utils.RandomPort
+import eu.timepit.refined.auto._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
@@ -284,7 +285,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     )
 
     def config(strategy: LoadTopicStrategy = LoadAll) =
-      TopicLoaderConfig(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), 1.second)
+      TopicLoaderConfig(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), 1.second, 100)
 
     val LoadStateTopic1 = "load-state-topic-1"
     val LoadStateTopic2 = "load-state-topic-2"

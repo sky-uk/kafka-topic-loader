@@ -23,5 +23,5 @@ import scala.concurrent.duration.FiniteDuration
 final case class TopicLoaderConfig(strategy: LoadTopicStrategy,
                                    topics: NonEmptyList[String],
                                    idleTimeout: FiniteDuration,
-                                   bufferSize: Int Refined Positive = 100,
+                                   bufferSize: Int Refined Positive,
                                    parallelism: Int Refined Positive = 1)
