@@ -84,9 +84,9 @@ object TopicLoader extends LazyLogging {
       val filterBelowHighestOffset = Flow[ConsumerRecord[String, T]]
         .map(r => r -> highestOffsets(topicPartition(r.topic)(r.partition)))
         .collect {
-          case (r, highest) if r.offset == highest =>
+          case (r, highest) if r.offset >= highest =>
             (r, LastRecordForPartition)
-          case (r, highest) if r.offset < highest => (r, LessThanHighestOffset)
+          case (r, highest) => (r, LessThanHighestOffset)
         }
 
       def handleRecord(r: (ConsumerRecord[String, T], RecordPosition)) =
