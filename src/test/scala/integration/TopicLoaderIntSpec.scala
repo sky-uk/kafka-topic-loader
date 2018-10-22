@@ -18,7 +18,6 @@ import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.clients.producer.ProducerConfig
-import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException
 import org.apache.kafka.common.serialization._
 import org.scalatest.concurrent.Eventually
@@ -26,14 +25,17 @@ import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
 import utils.RandomPort
 import eu.timepit.refined.auto._
+import org.apache.kafka.common.TopicPartition
+import org.scalatest.Assertion
 
+import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
 class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
-  override implicit val patienceConfig = PatienceConfig(5.seconds, 100.millis)
+  override implicit val patienceConfig = PatienceConfig(20.seconds, 200.millis)
 
   "Retrieve state on start up" should {
 
@@ -116,7 +118,8 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
           createCustomTopic(LoadStateTopic1, partitions = 5)
           publishToKafka(LoadStateTopic1, records)
 
-          val count = countKafkaRecordsFromEarliestOffset(LoadStateTopic1, autoCommit = true)
+          val count = withAssignedConsumer(true, offsetReset = "earliest", LoadStateTopic1)(
+            consumeAllKafkaRecordsFromEarliestOffset(_).size)
           count shouldBe records.size
 
           loadTestTopic(strategy).futureValue shouldBe Done
@@ -125,24 +128,60 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     }
 
     "work when LOG-BEGINNING-OFFSETS is > 0 (e.g. has been reset)" in new TestContext with KafkaConsumer {
-      val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
-      val topicConfig =
-        Map("cleanup.policy" -> "delete", "retention.ms" -> "10")
+      val topicConfig = Map(
+        "cleanup.policy"            -> "compact",
+        "delete.retention.ms"       -> "0",
+        "min.insync.replicas"       -> "2",
+        "min.cleanable.dirty.ratio" -> "0.01",
+        "segment.ms"                -> "10"
+      )
+      val initialRecords = records(1 to 10, message = "old")
+      val newRecords     = records(1 to 10, message = "new")
 
       forEvery(loadStrategy) { strategy =>
         withRunningKafka {
-          createCustomTopic(LoadStateTopic1, topicConfig, partitions = 5)
-          records.foreach {
-            case (key, msg) => publishToKafka(LoadStateTopic1, key, msg)
-          }
+          createCustomTopic(LoadStateTopic1, topicConfig, partitions = 2)
+          publishToKafka(LoadStateTopic1, initialRecords)
+          consumeEventually(LoadStateTopic1)(_ should contain allElementsOf initialRecords)
 
-          waitForKafkaTopicToHaveMaxElementsOf(LoadStateTopic1, 10)
+          publishToKafka(LoadStateTopic1, newRecords)
+          publishToKafka(LoadStateTopic1, records(11 to 20, "msg"))
+          waitForOverridingKafkaMessages(LoadStateTopic1, initialRecords, newRecords)
 
           loadTestTopic(strategy).futureValue shouldBe Done
         }
       }
     }
+
+    "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
+    with KafkaConsumer {
+      val topicConfig = Map(
+        "cleanup.policy"            -> "compact",
+        "delete.retention.ms"       -> "0",
+        "min.insync.replicas"       -> "2",
+        "min.cleanable.dirty.ratio" -> "0.01",
+        "segment.ms"                -> "10"
+      )
+      val initialRecordsToOverride = records(6 to 10, "will be overridden")
+      val overridingRecords        = records(6 to 10, "new")
+
+      withRunningKafka {
+        createCustomTopic(LoadStateTopic1, topicConfig, partitions = 2)
+
+        publishToKafka(LoadStateTopic1, records(1 to 5, message = "init"))
+        publishToKafka(LoadStateTopic1, initialRecordsToOverride)
+        moveOffsetToEnd(LoadStateTopic1)
+
+        publishToKafka(LoadStateTopic1, overridingRecords)
+        publishToKafka(LoadStateTopic1, records(11 to 20, message = "new"))
+        waitForOverridingKafkaMessages(LoadStateTopic1, initialRecordsToOverride, overridingRecords)
+
+        loadTestTopic(LoadCommitted).futureValue shouldBe Done //TODO should fail!!!
+      }
+    }
+
+    //TODO don't finish too early when work when highest offset is missing in log
+    //TODO when highest offset is higher then maximum offset in log (for log compacted topic)
 
     "throw if Kafka is unavailable at startup" in new TestContext {
       override implicit lazy val system: ActorSystem = ActorSystem(
@@ -284,6 +323,8 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       )
     )
 
+    def records(r: Range, message: String) = r.toList.map(_.toString -> message)
+
     def config(strategy: LoadTopicStrategy = LoadAll) =
       TopicLoaderConfig(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), 1.second, 100)
 
@@ -307,7 +348,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       probe.setAutoPilot((sender: ActorRef, msg: Any) =>
         msg match {
           case _ =>
-            Thread.sleep(delay.toMillis); sender ! response;
+            Thread.sleep(delay.toMillis); sender ! response
             TestActor.KeepRunning
       })
       probe
@@ -325,41 +366,59 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
   trait KafkaConsumer { this: TestContext =>
 
-    def moveOffsetToEnd(topics: String*): Unit = {
-      val consumer = getConsumer(autoCommit = true, "latest")
-      consumer.subscribe(topics.toList.asJava)
-      consumer.poll(0)
-      consumer.close()
-    }
+    def moveOffsetToEnd(topic: String): Unit = withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(0))
 
-    def waitForKafkaTopicToHaveMaxElementsOf(topic: String, amount: Int) =
-      eventually {
-        countKafkaRecordsFromEarliestOffset(topic, autoCommit = false) should be <= amount
+    def waitForOverridingKafkaMessages(topic: String,
+                                       initialRecords: List[(String, String)],
+                                       newRecords: List[(String, String)]) =
+      consumeEventually(topic) { r =>
+        r should contain noElementsOf initialRecords
+        r should contain allElementsOf newRecords
       }
 
-    def countKafkaRecordsFromEarliestOffset(topic: String, autoCommit: Boolean): Int = {
+    def consumeEventually(topic: String, groupId: String = UUID.randomUUID().toString)(
+        f: List[(String, String)] => Assertion) =
+      eventually {
+        val records = withAssignedConsumer(autoCommit = false, offsetReset = "earliest", topic, groupId.some)(
+          consumeAllKafkaRecordsFromEarliestOffset(_, List.empty))
 
-      val consumer = getConsumer(autoCommit, offsetReset = "earliest")
-      val partitions = consumer
-        .partitionsFor(topic)
-        .asScala
-        .map(p => new TopicPartition(topic, p.partition))
+        f(records.map(r => r.key -> r.value))
+      }
 
+    def withAssignedConsumer[T](autoCommit: Boolean,
+                                offsetReset: String,
+                                topic: String,
+                                groupId: Option[String] = None)(f: Consumer[String, String] => T): T = {
+      val consumer = getConsumer(autoCommit, offsetReset, groupId)
+      assignPartitions(consumer, topic)
       try {
-        consumer.assign(partitions.asJava)
-        consumer.poll(500).records(topic).asScala.size
+        f(consumer)
       } finally {
         consumer.close()
       }
     }
 
-    private def getConsumer(autoCommit: Boolean, offsetReset: String): Consumer[String, String] = {
+    def assignPartitions(consumer: Consumer[_, _], topic: String): Unit = {
+      val partitions = consumer.partitionsFor(topic).asScala.map(p => new TopicPartition(topic, p.partition))
+      consumer.assign(partitions.asJava)
+    }
 
-      val settings =
+    @tailrec
+    final def consumeAllKafkaRecordsFromEarliestOffset(
+        consumer: Consumer[String, String],
+        polled: List[ConsumerRecord[String, String]] = List.empty): List[ConsumerRecord[String, String]] = {
+      val p = consumer.poll(500).iterator().asScala.toList
+      if (p.isEmpty) polled else consumeAllKafkaRecordsFromEarliestOffset(consumer, polled ++ p)
+    }
+
+    def getConsumer(autoCommit: Boolean, offsetReset: String, groupId: Option[String]): Consumer[String, String] = {
+
+      val baseSettings =
         ConsumerSettings(system, new StringDeserializer, new StringDeserializer)
           .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, autoCommit.toString)
           .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, offsetReset)
 
+      val settings = groupId.fold(baseSettings)(baseSettings.withProperty(ConsumerConfig.GROUP_ID_CONFIG, _))
       settings.createKafkaConsumer()
     }
   }

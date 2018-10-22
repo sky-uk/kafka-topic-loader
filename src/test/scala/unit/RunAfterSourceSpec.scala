@@ -14,7 +14,7 @@ import unit.SourceOrderingActor._
 
 import scala.concurrent.duration._
 
-class TopicLoaderSpec extends WordSpecBase {
+class RunAfterSourceSpec extends WordSpecBase {
 
   implicit val timeout = Timeout(5 seconds)
   implicit val pc      = PatienceConfig(150 millis, 15 millis)
