@@ -150,24 +150,25 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
     with KafkaConsumer {
       val recordsStore             = new RecordStore()
+      val initialRecordsToStay     = records(1 to 5, "init")
       val initialRecordsToOverride = records(6 to 10, "will be overridden")
       val overridingRecords        = records(6 to 10, "new")
 
       withRunningKafka {
         createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 4)
 
-        publishToKafka(LoadStateTopic1, records(1 to 5, message = "init"))
+        publishToKafka(LoadStateTopic1, initialRecordsToStay)
         publishToKafka(LoadStateTopic1, initialRecordsToOverride)
         moveOffsetToEnd(LoadStateTopic1)
 
         publishToKafka(LoadStateTopic1, overridingRecords)
-        publishToKafka(LoadStateTopic1, records(11 to 20, message = "new"))
+        publishToKafka(LoadStateTopic1, records(11 to 20, "new"))
         waitForOverridingKafkaMessages(LoadStateTopic1, initialRecordsToOverride, overridingRecords)
 
         loadTestTopic(LoadCommitted, recordsStore.storeRecord).futureValue shouldBe Done
 
         val recordKeys = recordsStore.getRecords.map(_.map(_.key)).futureValue
-        recordKeys should contain theSameElementsAs List.range(1, 6).map(_.toString)
+        recordKeys should contain theSameElementsAs initialRecordsToStay.map(_._1)
       }
     }
 
