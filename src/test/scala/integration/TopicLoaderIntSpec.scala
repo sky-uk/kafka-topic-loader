@@ -167,10 +167,9 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         loadTestTopic(LoadCommitted, recordsStore.storeRecord).futureValue shouldBe Done
 
         val recordKeys = recordsStore.getRecords.map(_.map(_.key)).futureValue
-        recordKeys should contain theSameElementsAs (1 to 10).toList
+        recordKeys should contain theSameElementsAs List.range(1, 6).map(_.toString)
       }
     }
-    //TODO when highest offset is higher then maximum offset in log (for log compacted topic)
 
     "throw if Kafka is unavailable at startup" in new TestContext {
       override implicit lazy val system: ActorSystem = ActorSystem(

@@ -12,7 +12,7 @@ import akka.stream.scaladsl.{Flow, Source}
 import cats.syntax.show._
 import cats.{Always, Show}
 import com.typesafe.scalalogging.LazyLogging
-import org.apache.kafka.clients.consumer._
+import org.apache.kafka.clients.consumer.{ConsumerRecord, _}
 import org.apache.kafka.common.serialization.{Deserializer, StringDeserializer}
 import org.apache.kafka.common.{PartitionInfo, TopicPartition}
 
@@ -27,7 +27,7 @@ object TopicLoader extends LazyLogging {
     */
   def apply[T](config: TopicLoaderConfig,
                onRecord: ConsumerRecord[String, T] => Future[_],
-               valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Option[_], _] = {
+               valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[_, _] = {
 
     import system.dispatcher
 
@@ -70,29 +70,36 @@ object TopicLoader extends LazyLogging {
         }
       }
 
-    def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[Option[_], _] = {
+    def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[ConsumerRecord[String, T], _] = {
       offsets.foreach {
         case (partition, offset) =>
           logger.info(s"${offset.show} for $partition")
       }
 
-      val relativeOffsets          = offsets.values.map(o => o.highest - o.lowest)
-      val lowestOffsets            = offsets.mapValues(_.lowest)
-      val highestOffsets           = offsets.mapValues(_.highest - 1)
-      val numPartitionsWithRecords = relativeOffsets.count(_ > 0)
+      val nonEmptyOffsets  = offsets.filter { case (_, o) => o.highest > o.lowest }
+      val lowestOffsets    = nonEmptyOffsets.mapValues(_.lowest)
+      val highestOffsets   = nonEmptyOffsets.mapValues(_.highest - 1)
+      val noConsumerRecord = None.asInstanceOf[Option[ConsumerRecord[String, T]]]
 
       val filterBelowHighestOffset = Flow[ConsumerRecord[String, T]]
-        .map(r => r -> highestOffsets(topicPartition(r.topic)(r.partition)))
-        .collect {
-          case (r, highest) if r.offset >= highest =>
-            (r, LastRecordForPartition)
-          case (r, _) => (r, LessThanHighestOffset)
+        .scan((highestOffsets, noConsumerRecord)) {
+          case ((leftHighestOffsets, _), r) =>
+            val tPartition          = new TopicPartition(r.topic, r.partition)
+            val highestForPartition = leftHighestOffsets.get(tPartition)
+            val newHighests = highestForPartition.collect {
+              case h if r.offset >= h =>
+                logger.info(s"Finished loading data from ${r.topic}-${r.partition}")
+                leftHighestOffsets.filterKeys(_ != tPartition)
+            }.getOrElse(leftHighestOffsets)
+            val pass = highestForPartition.collect { case h if r.offset() <= h => r }
+            (newHighests, pass)
         }
+        .takeWhile(_._1.nonEmpty, inclusive = true)
+        .collect { case (_, Some(r)) => r }
 
-      def handleRecord(r: (ConsumerRecord[String, T], RecordPosition)) =
-        onRecord(r._1).map(_ => r)
+      def handleRecord(r: ConsumerRecord[String, T]) = onRecord(r).map(_ => r)
 
-      relativeOffsets.sum match {
+      nonEmptyOffsets.size match {
         case 0 =>
           logger.info("No data to load")
           Source.empty
@@ -103,12 +110,6 @@ object TopicLoader extends LazyLogging {
             .idleTimeout(config.idleTimeout)
             .via(filterBelowHighestOffset)
             .mapAsync(config.parallelism.value)(handleRecord)
-            .collect {
-              case (r, LastRecordForPartition) =>
-                logger.info(s"Finished loading data from ${r.topic}-${r.partition}")
-                None
-            }
-            .take(numPartitionsWithRecords)
             .mapMaterializedValue(logResult)
       }
     }
@@ -145,9 +146,4 @@ object TopicLoader extends LazyLogging {
 
   private implicit val showLogOffsets: Show[LogOffsets] = o =>
     s"LogOffsets(lowest = ${o.lowest}, highest = ${o.highest})"
-
-  private sealed trait RecordPosition
-  private case object LessThanHighestOffset  extends RecordPosition
-  private case object LastRecordForPartition extends RecordPosition
-
 }
