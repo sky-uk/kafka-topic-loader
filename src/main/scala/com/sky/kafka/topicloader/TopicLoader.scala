@@ -86,7 +86,7 @@ object TopicLoader extends LazyLogging {
         .collect {
           case (r, highest) if r.offset >= highest =>
             (r, LastRecordForPartition)
-          case (r, highest) => (r, LessThanHighestOffset)
+          case (r, _) => (r, LessThanHighestOffset)
         }
 
       def handleRecord(r: (ConsumerRecord[String, T], RecordPosition)) =

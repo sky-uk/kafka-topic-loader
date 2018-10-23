@@ -1,13 +1,14 @@
 package integration
 
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
 
 import akka.Done
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.kafka.ConsumerSettings
-import akka.pattern.ask
 import akka.stream.scaladsl.Sink
 import akka.testkit.{TestActor, TestProbe}
+import akka.pattern.ask
 import akka.util.Timeout
 import base.{AkkaSpecBase, WordSpecBase}
 import cats.data.NonEmptyList
@@ -16,7 +17,7 @@ import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.consumer._
+import org.apache.kafka.clients.consumer.{ConsumerRecord, _}
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.errors.TimeoutException
 import org.apache.kafka.common.serialization._
@@ -128,19 +129,12 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     }
 
     "work when LOG-BEGINNING-OFFSETS is > 0 (e.g. has been reset)" in new TestContext with KafkaConsumer {
-      val topicConfig = Map(
-        "cleanup.policy"            -> "compact",
-        "delete.retention.ms"       -> "0",
-        "min.insync.replicas"       -> "2",
-        "min.cleanable.dirty.ratio" -> "0.01",
-        "segment.ms"                -> "10"
-      )
       val initialRecords = records(1 to 10, message = "old")
       val newRecords     = records(1 to 10, message = "new")
 
       forEvery(loadStrategy) { strategy =>
         withRunningKafka {
-          createCustomTopic(LoadStateTopic1, topicConfig, partitions = 2)
+          createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
           publishToKafka(LoadStateTopic1, initialRecords)
           consumeEventually(LoadStateTopic1)(_ should contain allElementsOf initialRecords)
 
@@ -155,18 +149,12 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
     with KafkaConsumer {
-      val topicConfig = Map(
-        "cleanup.policy"            -> "compact",
-        "delete.retention.ms"       -> "0",
-        "min.insync.replicas"       -> "2",
-        "min.cleanable.dirty.ratio" -> "0.01",
-        "segment.ms"                -> "10"
-      )
+      val recordsStore             = new RecordStore()
       val initialRecordsToOverride = records(6 to 10, "will be overridden")
       val overridingRecords        = records(6 to 10, "new")
 
       withRunningKafka {
-        createCustomTopic(LoadStateTopic1, topicConfig, partitions = 2)
+        createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
 
         publishToKafka(LoadStateTopic1, records(1 to 5, message = "init"))
         publishToKafka(LoadStateTopic1, initialRecordsToOverride)
@@ -176,11 +164,12 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         publishToKafka(LoadStateTopic1, records(11 to 20, message = "new"))
         waitForOverridingKafkaMessages(LoadStateTopic1, initialRecordsToOverride, overridingRecords)
 
-        loadTestTopic(LoadCommitted).futureValue shouldBe Done //TODO should fail!!!
+        loadTestTopic(LoadCommitted, recordsStore.storeRecord).futureValue shouldBe Done
+
+        val recordKeys = recordsStore.getRecords.map(_.map(_.key)).futureValue
+        recordKeys should contain theSameElementsAs List.range(1, 10)
       }
     }
-
-    //TODO don't finish too early when work when highest offset is missing in log
     //TODO when highest offset is higher then maximum offset in log (for log compacted topic)
 
     "throw if Kafka is unavailable at startup" in new TestContext {
@@ -233,8 +222,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         createCustomTopic(LoadStateTopic1, partitions = 12)
         publishToKafka(LoadStateTopic1, records)
 
-        val callSlowProbe: ConsumerRecord[String, String] => Future[Option[ConsumerRecord[String, String]]] =
-          cr => (slowProbe.ref ? 123).map(_ => cr.some)
+        val callSlowProbe: ConsumerRecord[String, String] => Future[Int] = _ => (slowProbe.ref ? 123).map(_ => 0)
 
         val res = loadTestTopic(LoadAll, callSlowProbe)
 
@@ -272,7 +260,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     "fail when store record is unsuccessful" in new TestContext {
       val boom = new Exception("boom!")
-      val failingHandler: ConsumerRecord[String, String] => Future[Option[Unit]] =
+      val failingHandler: ConsumerRecord[String, String] => Future[Int] =
         _ => Future.failed(boom)
 
       withRunningKafka {
@@ -323,6 +311,14 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       )
     )
 
+    val compactedTopicConfig = Map(
+      "cleanup.policy"            -> "compact",
+      "delete.retention.ms"       -> "0",
+      "min.insync.replicas"       -> "2",
+      "min.cleanable.dirty.ratio" -> "0.01",
+      "segment.ms"                -> "10"
+    )
+
     def records(r: Range, message: String) = r.toList.map(_.toString -> message)
 
     def config(strategy: LoadTopicStrategy = LoadAll) =
@@ -334,7 +330,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     val loadStrategy = Table("strategy", LoadAll, LoadCommitted)
 
     def loadTestTopic(strategy: LoadTopicStrategy,
-                      f: ConsumerRecord[String, String] => Future[Option[Any]] = cr => Future.successful(cr.some)) =
+                      f: ConsumerRecord[String, String] => Future[Int] = cr => Future.successful(0)) =
       TopicLoader(config(strategy), f, new StringDeserializer)
         .runWith(Sink.ignore)
 
@@ -356,12 +352,10 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
   }
 
   trait CountingRecordStore { this: TestContext =>
-    var numRecordsLoaded = 0
+    val numRecordsLoaded = new AtomicInteger()
 
-    val storeRecord: ConsumerRecord[String, String] => Future[Option[Unit]] =
-      _ =>
-        Future.successful { numRecordsLoaded = numRecordsLoaded + 1 }
-          .map(_.some)
+    val storeRecord: ConsumerRecord[String, String] => Future[Int] =
+      _ => Future.successful(numRecordsLoaded.incrementAndGet())
   }
 
   trait KafkaConsumer { this: TestContext =>
@@ -420,6 +414,29 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
       val settings = groupId.fold(baseSettings)(baseSettings.withProperty(ConsumerConfig.GROUP_ID_CONFIG, _))
       settings.createKafkaConsumer()
+    }
+  }
+
+  class RecordStore()(implicit system: ActorSystem) {
+    private val storeActor = system.actorOf(Props(classOf[Store], RecordStore.this))
+
+    def storeRecord(rec: ConsumerRecord[String, String])(implicit timeout: Timeout): Future[Int] =
+      (storeActor ? rec).mapTo[Int]
+
+    def getRecords(implicit timeout: Timeout): Future[List[ConsumerRecord[String, String]]] =
+      (storeActor ? 'GET).mapTo[List[ConsumerRecord[String, String]]]
+
+    private class Store extends Actor {
+      override def receive: Receive = store(List.empty)
+
+      def store(records: List[ConsumerRecord[_, _]]): Receive = {
+        case r: ConsumerRecord[_, _] =>
+          val newRecs = records :+ r
+          sender() ! newRecs.size
+          context.become(store(newRecs))
+        case 'GET =>
+          sender() ! records
+      }
     }
   }
 }
