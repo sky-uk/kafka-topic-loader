@@ -51,7 +51,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         publishToKafka(LoadStateTopic1, records)
         publishToKafka(LoadStateTopic2, records)
 
-        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded shouldBe 30)
+        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded.get() shouldBe 30)
       }
     }
 
@@ -67,7 +67,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         moveOffsetToEnd(LoadStateTopic1)
         publishToKafka(LoadStateTopic1, records.takeRight(4))
 
-        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded shouldBe 11)
+        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded.get() shouldBe 11)
       }
     }
 
@@ -81,7 +81,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
         publishToKafka(LoadStateTopic1, records)
 
-        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded shouldBe 15)
+        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded.get() shouldBe 15)
       }
     }
 
@@ -96,7 +96,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         publishToKafka(LoadStateTopic1, records)
         moveOffsetToEnd(LoadStateTopic1)
 
-        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded shouldBe 15)
+        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded.get() shouldBe 15)
       }
     }
 
@@ -154,7 +154,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       val overridingRecords        = records(6 to 10, "new")
 
       withRunningKafka {
-        createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
+        createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 4)
 
         publishToKafka(LoadStateTopic1, records(1 to 5, message = "init"))
         publishToKafka(LoadStateTopic1, initialRecordsToOverride)
@@ -167,7 +167,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         loadTestTopic(LoadCommitted, recordsStore.storeRecord).futureValue shouldBe Done
 
         val recordKeys = recordsStore.getRecords.map(_.map(_.key)).futureValue
-        recordKeys should contain theSameElementsAs List.range(1, 10)
+        recordKeys should contain theSameElementsAs (1 to 10).toList
       }
     }
     //TODO when highest offset is higher then maximum offset in log (for log compacted topic)
@@ -330,7 +330,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     val loadStrategy = Table("strategy", LoadAll, LoadCommitted)
 
     def loadTestTopic(strategy: LoadTopicStrategy,
-                      f: ConsumerRecord[String, String] => Future[Int] = cr => Future.successful(0)) =
+                      f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)) =
       TopicLoader(config(strategy), f, new StringDeserializer)
         .runWith(Sink.ignore)
 
@@ -360,7 +360,8 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
   trait KafkaConsumer { this: TestContext =>
 
-    def moveOffsetToEnd(topic: String): Unit = withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(0))
+    def moveOffsetToEnd(topic: String): Unit =
+      withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(0))
 
     def waitForOverridingKafkaMessages(topic: String,
                                        initialRecords: List[(String, String)],
