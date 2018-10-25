@@ -12,7 +12,7 @@ import akka.stream.scaladsl.{Flow, Source}
 import cats.syntax.show._
 import cats.{Always, Show}
 import com.typesafe.scalalogging.LazyLogging
-import org.apache.kafka.clients.consumer.{ConsumerRecord, _}
+import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.serialization.{Deserializer, StringDeserializer}
 import org.apache.kafka.common.{PartitionInfo, TopicPartition}
 
