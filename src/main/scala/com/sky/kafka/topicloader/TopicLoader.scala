@@ -9,6 +9,7 @@ import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Flow, Source}
+import cats.syntax.option._
 import cats.syntax.show._
 import cats.{Always, Show}
 import com.typesafe.scalalogging.LazyLogging
@@ -71,31 +72,17 @@ object TopicLoader extends LazyLogging {
       }
 
     def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[ConsumerRecord[String, T], _] = {
-      offsets.foreach {
-        case (partition, offset) =>
-          logger.info(s"${offset.show} for $partition")
-      }
+      offsets.foreach { case (partition, offset) => logger.info(s"${offset.show} for $partition") }
 
-      val nonEmptyOffsets  = offsets.filter { case (_, o) => o.highest > o.lowest }
-      val lowestOffsets    = nonEmptyOffsets.mapValues(_.lowest)
-      val highestOffsets   = nonEmptyOffsets.mapValues(_.highest - 1)
-      val noConsumerRecord = None.asInstanceOf[Option[ConsumerRecord[String, T]]]
+      val nonEmptyOffsets   = offsets.filter { case (_, o) => o.highest > o.lowest }
+      val lowestOffsets     = nonEmptyOffsets.mapValues(_.lowest)
+      val allHighestOffsets = HighestOffsetsWithRecord[T](nonEmptyOffsets.mapValues(_.highest - 1))
 
-      val filterBelowHighestOffset = Flow[ConsumerRecord[String, T]]
-        .scan((highestOffsets, noConsumerRecord)) {
-          case ((leftHighestOffsets, _), r) =>
-            val tPartition          = new TopicPartition(r.topic, r.partition)
-            val highestForPartition = leftHighestOffsets.get(tPartition)
-            val newHighests = highestForPartition.collect {
-              case h if r.offset >= h =>
-                logger.info(s"Finished loading data from ${r.topic}-${r.partition}")
-                leftHighestOffsets.filterKeys(_ != tPartition)
-            }.getOrElse(leftHighestOffsets)
-            val pass = highestForPartition.collect { case h if r.offset() <= h => r }
-            (newHighests, pass)
-        }
-        .takeWhile(_._1.nonEmpty, inclusive = true)
-        .collect { case (_, Some(r)) => r }
+      val filterBelowHighestOffset =
+        Flow[ConsumerRecord[String, T]]
+          .scan(allHighestOffsets)(emitRecordRemovingConsumedPartition)
+          .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
+          .collect { case WithRecord(r) => r }
 
       def handleRecord(r: ConsumerRecord[String, T]) = onRecord(r).map(_ => r)
 
@@ -115,6 +102,19 @@ object TopicLoader extends LazyLogging {
     }
 
     offsetsSource.flatMapConcat(topicDataSource)
+  }
+
+  private def emitRecordRemovingConsumedPartition[T](t: HighestOffsetsWithRecord[T],
+                                                     r: ConsumerRecord[String, T]): HighestOffsetsWithRecord[T] = {
+    val partitionHighest: Option[Long] = t.partitionOffsets.get(new TopicPartition(r.topic, r.partition))
+    val reachedHighest: Option[TopicPartition] = for {
+      offset  <- partitionHighest
+      highest <- if (r.offset >= offset) { new TopicPartition(r.topic, r.partition) }.some else None
+      _       = logger.info(s"Finished loading data from ${r.topic}-${r.partition}")
+    } yield highest
+    val updatedHighests = reachedHighest.fold(t.partitionOffsets)(highest => t.partitionOffsets - highest)
+    val emittableRecord = partitionHighest.collect { case h if r.offset() <= h => r }
+    HighestOffsetsWithRecord(updatedHighests, emittableRecord)
   }
 
   private def logResult(control: Consumer.Control)(implicit ec: ExecutionContext) = {
@@ -143,6 +143,14 @@ object TopicLoader extends LazyLogging {
       .mapValues(_.longValue)
 
   private case class LogOffsets(lowest: Long, highest: Long)
+
+  private case class HighestOffsetsWithRecord[T](partitionOffsets: Map[TopicPartition, Long],
+                                                 consumerRecord: Option[ConsumerRecord[String, T]] =
+                                                   none[ConsumerRecord[String, T]])
+
+  private object WithRecord {
+    def unapply[T](h: HighestOffsetsWithRecord[T]): Option[ConsumerRecord[String, T]] = h.consumerRecord
+  }
 
   private implicit val showLogOffsets: Show[LogOffsets] = o =>
     s"LogOffsets(lowest = ${o.lowest}, highest = ${o.highest})"

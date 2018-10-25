@@ -31,7 +31,7 @@ import org.scalatest.Assertion
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
 class TopicLoaderIntSpec extends WordSpecBase with Eventually {
@@ -71,7 +71,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       }
     }
 
-    "update store records when one of state topics is empty for load all strategy" in new TestContext with KafkaConsumer
+    "update store records when one of topics is empty for load all strategy" in new TestContext with KafkaConsumer
     with CountingRecordStore {
       val records =
         (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
@@ -85,8 +85,8 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       }
     }
 
-    "update store records when one of state topics is empty for load committed strategy" in new TestContext
-    with KafkaConsumer with CountingRecordStore {
+    "update store records when one of topics is empty for load committed strategy" in new TestContext with KafkaConsumer
+    with CountingRecordStore {
       val records =
         (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
 
@@ -100,7 +100,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       }
     }
 
-    "complete successfully if the versions topic is empty" in new TestContext {
+    "complete successfully if the topic is empty" in new TestContext {
       withRunningKafka {
         createCustomTopic(LoadStateTopic1, partitions = 10)
 
@@ -131,43 +131,47 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     "work when LOG-BEGINNING-OFFSETS is > 0 (e.g. has been reset)" in new TestContext with KafkaConsumer {
       val initialRecords = records(1 to 10, message = "old")
       val newRecords     = records(1 to 10, message = "new")
+      val endRecords     = records(11 to 20, message = "msg")
 
       forEvery(loadStrategy) { strategy =>
+        val recordStore = new RecordStore()
+
         withRunningKafka {
           createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
           publishToKafka(LoadStateTopic1, initialRecords)
           consumeEventually(LoadStateTopic1)(_ should contain allElementsOf initialRecords)
 
           publishToKafka(LoadStateTopic1, newRecords)
-          publishToKafka(LoadStateTopic1, records(11 to 20, "msg"))
+          publishToKafka(LoadStateTopic1, endRecords)
+          moveOffsetToEnd(LoadStateTopic1)
           waitForOverridingKafkaMessages(LoadStateTopic1, initialRecords, newRecords)
 
-          loadTestTopic(strategy).futureValue shouldBe Done
+          loadTestTopic(strategy, recordStore.storeRecord).futureValue shouldBe Done
+          recordStore.recordKeys.futureValue should contain theSameElementsAs (newRecords ++ endRecords).toMap.keys
         }
       }
     }
 
     "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
     with KafkaConsumer {
-      val recordsStore             = new RecordStore()
+      val recordStore              = new RecordStore()
       val initialRecordsToStay     = records(1 to 5, "init")
       val initialRecordsToOverride = records(6 to 10, "will be overridden")
       val overridingRecords        = records(6 to 10, "new")
 
       withRunningKafka {
-        createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 4)
+        createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
 
-        publishToKafka(LoadStateTopic1, initialRecordsToStay)
-        publishToKafka(LoadStateTopic1, initialRecordsToOverride)
+        publishToKafka(LoadStateTopic1, initialRecordsToStay ++ initialRecordsToOverride)
         moveOffsetToEnd(LoadStateTopic1)
 
         publishToKafka(LoadStateTopic1, overridingRecords)
         publishToKafka(LoadStateTopic1, records(11 to 20, "new"))
         waitForOverridingKafkaMessages(LoadStateTopic1, initialRecordsToOverride, overridingRecords)
 
-        loadTestTopic(LoadCommitted, recordsStore.storeRecord).futureValue shouldBe Done
+        loadTestTopic(LoadCommitted, recordStore.storeRecord).futureValue shouldBe Done
 
-        val recordKeys = recordsStore.getRecords.map(_.map(_.key)).futureValue
+        val recordKeys = recordStore.getRecords.map(_.map(_.key)).futureValue
         recordKeys should contain theSameElementsAs initialRecordsToStay.map(_._1)
       }
     }
@@ -423,6 +427,8 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     def storeRecord(rec: ConsumerRecord[String, String])(implicit timeout: Timeout): Future[Int] =
       (storeActor ? rec).mapTo[Int]
+
+    def recordKeys(implicit timeout: Timeout, ec: ExecutionContext) = getRecords.map(_.map(_.key))
 
     def getRecords(implicit timeout: Timeout): Future[List[ConsumerRecord[String, String]]] =
       (storeActor ? 'GET).mapTo[List[ConsumerRecord[String, String]]]
