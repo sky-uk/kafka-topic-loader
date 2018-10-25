@@ -17,7 +17,7 @@ import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.consumer.{ConsumerRecord, _}
+import org.apache.kafka.clients.consumer._
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.errors.TimeoutException
 import org.apache.kafka.common.serialization._
