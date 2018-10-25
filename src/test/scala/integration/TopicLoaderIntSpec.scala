@@ -139,9 +139,8 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         withRunningKafka {
           createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
           publishToKafka(LoadStateTopic1, initialRecords)
-          consumeEventually(LoadStateTopic1)(_ should contain allElementsOf initialRecords)
-
           publishToKafka(LoadStateTopic1, newRecords)
+
           publishToKafka(LoadStateTopic1, endRecords)
           moveOffsetToEnd(LoadStateTopic1)
           waitForOverridingKafkaMessages(LoadStateTopic1, initialRecords, newRecords)
