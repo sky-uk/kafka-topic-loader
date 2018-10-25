@@ -71,7 +71,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       }
     }
 
-    "update store records when one of topics is empty for load all strategy" in new TestContext with KafkaConsumer
+    "update store records when one topic is empty for load all strategy" in new TestContext with KafkaConsumer
     with CountingRecordStore {
       val records =
         (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
