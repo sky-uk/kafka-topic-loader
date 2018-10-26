@@ -112,6 +112,7 @@ object TopicLoader extends LazyLogging {
       highest <- if (r.offset >= offset) { new TopicPartition(r.topic, r.partition) }.some else None
       _       = logger.info(s"Finished loading data from ${r.topic}-${r.partition}")
     } yield highest
+
     val updatedHighests = reachedHighest.fold(t.partitionOffsets)(highest => t.partitionOffsets - highest)
     val emittableRecord = partitionHighest.collect { case h if r.offset() <= h => r }
     HighestOffsetsWithRecord(updatedHighests, emittableRecord)
