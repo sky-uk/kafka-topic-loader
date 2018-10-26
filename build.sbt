@@ -32,5 +32,7 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Dependencies.deps,
     buildInfoSettings,
     releaseSettings,
-    bintraySettings
+    bintraySettings,
+    parallelExecution in Test := false,
+    fork in Test := true,
   )
