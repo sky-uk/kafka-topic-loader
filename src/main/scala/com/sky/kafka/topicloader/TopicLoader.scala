@@ -9,6 +9,8 @@ import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Flow, Source}
+import cats.data.NonEmptyList
+import cats.instances.string.catsStdShowForString
 import cats.syntax.option._
 import cats.syntax.show._
 import cats.{Always, Show}
@@ -20,19 +22,26 @@ import org.apache.kafka.common.{PartitionInfo, TopicPartition}
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
+import pureconfig._
+import eu.timepit.refined.pureconfig._
 
 object TopicLoader extends LazyLogging {
 
   /**
     * Consumes the records from the provided topics, passing them through `onRecord`.
+    *
+    * @param strategy
+    * All records on a topic can be consumed using the `LoadAll` strategy.
+    * All records up to the last committed offset of the configured `group.id` (provided in your application.conf)
+    * can be consumed using the `LoadCommitted` strategy.
+    *
     */
-  def apply[T](config: TopicLoaderConfig,
+  def apply[T](strategy: LoadTopicStrategy,
+               topics: NonEmptyList[String],
                onRecord: ConsumerRecord[String, T] => Future[_],
                valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[_, _] = {
 
     import system.dispatcher
-
-    def topicPartition(topic: String) = new TopicPartition(topic, _: Int)
 
     def earliestOffsets(topic: String,
                         consumer: Consumer[String, T],
@@ -46,6 +55,8 @@ object TopicLoader extends LazyLogging {
         }
         .toMap
 
+    val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
+
     val settings =
       ConsumerSettings(system, new StringDeserializer, valueDeserializer)
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
@@ -54,11 +65,11 @@ object TopicLoader extends LazyLogging {
     val offsetsSource: Source[Map[TopicPartition, LogOffsets], NotUsed] =
       lazySource {
         withStandaloneConsumer(settings) { c =>
-          config.topics.map { topic =>
+          topics.map { topic =>
             val offsets =
-              getOffsets(topicPartition(topic), c.partitionsFor(topic)) _
+              getOffsets(new TopicPartition(topic, _: Int), c.partitionsFor(topic)) _
             val beginningOffsets = offsets(c.beginningOffsets)
-            val partitionToLong = config.strategy match {
+            val partitionToLong = strategy match {
               case LoadAll       => offsets(c.endOffsets)
               case LoadCommitted => earliestOffsets(topic, c, beginningOffsets)
             }
@@ -88,7 +99,7 @@ object TopicLoader extends LazyLogging {
 
       nonEmptyOffsets.size match {
         case 0 =>
-          logger.info("No data to load")
+          logger.info(s"No data to load from ${topics.show}")
           Source.empty
         case _ =>
           Consumer
@@ -97,7 +108,7 @@ object TopicLoader extends LazyLogging {
             .idleTimeout(config.idleTimeout)
             .via(filterBelowHighestOffset)
             .mapAsync(config.parallelism.value)(handleRecord)
-            .mapMaterializedValue(logResult)
+            .mapMaterializedValue(logResult(_, topics))
       }
     }
 
@@ -108,9 +119,12 @@ object TopicLoader extends LazyLogging {
                                                      r: ConsumerRecord[String, T]): HighestOffsetsWithRecord[T] = {
     val partitionHighest: Option[Long] = t.partitionOffsets.get(new TopicPartition(r.topic, r.partition))
     val reachedHighest: Option[TopicPartition] = for {
-      offset  <- partitionHighest
-      highest <- if (r.offset >= offset) { new TopicPartition(r.topic, r.partition) }.some else None
-      _       = logger.info(s"Finished loading data from ${r.topic}-${r.partition}")
+      offset <- partitionHighest
+      highest <- if (r.offset >= offset) {
+                  new TopicPartition(r.topic, r.partition)
+                }.some
+                else None
+      _ = logger.info(s"Finished loading data from ${r.topic}-${r.partition}")
     } yield highest
 
     val updatedHighests = reachedHighest.fold(t.partitionOffsets)(highest => t.partitionOffsets - highest)
@@ -118,10 +132,10 @@ object TopicLoader extends LazyLogging {
     HighestOffsetsWithRecord(updatedHighests, emittableRecord)
   }
 
-  private def logResult(control: Consumer.Control)(implicit ec: ExecutionContext) = {
+  private def logResult(control: Consumer.Control, topics: NonEmptyList[String])(implicit ec: ExecutionContext) = {
     control.isShutdown.onComplete {
-      case Success(_) => logger.info("Successfully loaded data")
-      case Failure(t) => logger.error("Error occurred while loading data", t)
+      case Success(_) => logger.info(s"Successfully loaded data from ${topics.show}")
+      case Failure(t) => logger.error(s"Error occurred while loading data from ${topics.show}", t)
     }
     control
   }

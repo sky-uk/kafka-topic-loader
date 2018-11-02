@@ -288,6 +288,11 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       name = s"test-actor-system-${UUID.randomUUID().toString}",
       config = ConfigFactory.parseString(
         s"""
+           |topic-loader {
+           |  idle-timeout = 5 minutes
+           |  buffer-size = 1000
+           |  parallelism = 5
+           |}
            |akka {
            |  loglevel = "OFF"
            |  kafka {
@@ -324,9 +329,6 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     def records(r: Range, message: String) = r.toList.map(_.toString -> message)
 
-    def config(strategy: LoadTopicStrategy = LoadAll) =
-      TopicLoaderConfig(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), 1.second, 100)
-
     val LoadStateTopic1 = "load-state-topic-1"
     val LoadStateTopic2 = "load-state-topic-2"
 
@@ -334,7 +336,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     def loadTestTopic(strategy: LoadTopicStrategy,
                       f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)) =
-      TopicLoader(config(strategy), f, new StringDeserializer)
+      TopicLoader(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), f, new StringDeserializer)
         .runWith(Sink.ignore)
 
     def createCustomTopics(topics: List[String], partitions: Int) =

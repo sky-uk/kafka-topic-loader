@@ -4,13 +4,12 @@ import Bintray._
 import BuildInfo._
 import Release._
 
-lazy val root = (project in file("."))
+lazy val root = Project(id = "kafka-topic-loader", base = file("."))
   .enablePlugins(BuildInfoPlugin, JavaAppPackaging, UniversalDeployPlugin)
   .settings(
     defineCommandAliases,
     organization := "com.sky",
     scalaVersion := "2.12.6",
-    version := "1.0.0-SNAPSHOT",
     name := "kafka-topic-loader",
     resolvers += Resolver.bintrayRepo("cakesolutions", "maven"),
     scalacOptions ++= Seq(
@@ -28,7 +27,7 @@ lazy val root = (project in file("."))
       "-Ypartial-unification"
     ),
     scalafmtVersion := "1.2.0",
-    scalafmtOnCompile := sys.env.getOrElse("RUN_SCALAFMT_ON_COMPILE", "false").toBoolean,
+    scalafmtOnCompile := true,
     libraryDependencies ++= Dependencies.deps,
     buildInfoSettings,
     releaseSettings,
