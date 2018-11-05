@@ -1,18 +1,14 @@
 package com.sky.kafka.topicloader
 
-import cats.data.NonEmptyList
 import eu.timepit.refined.api.Refined
 import eu.timepit.refined.auto._
 import eu.timepit.refined.numeric.Positive
 
 import scala.concurrent.duration.FiniteDuration
 
+final case class Config(topicLoader: TopicLoaderConfig)
+
 /**
-  * @param strategy
-  * All records on a topic can be consumed using the `LoadAll` strategy.
-  * All records up to the last committed offset of the configured `group.id` (provided in your application.conf)
-  * can be consumed using the `LoadCommitted` strategy.
-  *
   * @param parallelism
   * Determines how many Kafka records are processed in parallel by [[TopicLoader]].
   * We recommend using a parallelism > 1 if you are processing the records by sending them to an akka.actor.Actor.
@@ -20,8 +16,6 @@ import scala.concurrent.duration.FiniteDuration
   * using a parallelism of 1.
   *
   */
-final case class TopicLoaderConfig(strategy: LoadTopicStrategy,
-                                   topics: NonEmptyList[String],
-                                   idleTimeout: FiniteDuration,
+final case class TopicLoaderConfig(idleTimeout: FiniteDuration,
                                    bufferSize: Int Refined Positive,
                                    parallelism: Int Refined Positive = 1)
