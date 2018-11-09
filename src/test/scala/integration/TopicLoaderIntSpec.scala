@@ -38,7 +38,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
   override implicit val patienceConfig = PatienceConfig(20.seconds, 200.millis)
 
-  "Retrieve state on start up" should {
+  "TopicLoader" should {
 
     "update store records with entire state of provided topics using full log strategy" in new TestContext
     with CountingRecordStore {
