@@ -1,44 +1,40 @@
-lazy val kafkaTopicLoader = Project(id = "kafka-topic-loader", base = file("."))
-  .settings(
-    organization := "com.sky",
-    scalaVersion := "2.12.6",
-    name := "kafka-topic-loader",
-    scalacOptions ++= Seq(
-      "-encoding",
-      "UTF-8",
-      "-deprecation",
-      "-unchecked",
-      "-Ywarn-dead-code",
-      "-Ywarn-unused",
-      "-Xfatal-warnings",
-      "-language:implicitConversions",
-      "-language:postfixOps",
-      "-target:jvm-1.8",
-      "-feature",
-      "-Ypartial-unification"
-    ),
-    scalafmtVersion := "1.2.0",
-    scalafmtOnCompile := true,
-    libraryDependencies ++= deps,
-    bintraySettings,
-    parallelExecution in Test := false,
-    fork in Test := true
-  )
+organization := "com.sky"
+scalaVersion := "2.12.6"
+name := "kafka-topic-loader"
 
-lazy val bintraySettings = Seq(
-  bintrayOrganization := Some("sky-uk"),
-  bintrayReleaseOnPublish in ThisBuild := false,
-  bintrayRepository := "oss-maven",
-  bintrayVcsUrl := Some("https://github.com/sky-uk/kafka-topic-loader"),
-  licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
+scalacOptions ++= Seq(
+  "-encoding",
+  "UTF-8",
+  "-deprecation",
+  "-unchecked",
+  "-Ywarn-dead-code",
+  "-Ywarn-unused",
+  "-Xfatal-warnings",
+  "-language:implicitConversions",
+  "-language:postfixOps",
+  "-target:jvm-1.8",
+  "-feature",
+  "-Ypartial-unification"
 )
+
+scalafmtVersion := "1.2.0"
+scalafmtOnCompile := true
+
+parallelExecution in Test := false
+fork in Test := true
+
+bintrayOrganization := Some("sky-uk")
+bintrayReleaseOnPublish in ThisBuild := false
+bintrayRepository := "oss-maven"
+bintrayVcsUrl := Some("https://github.com/sky-uk/kafka-topic-loader")
+licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
 val AkkaVersion    = "2.5.10"
 val CatsVersion    = "1.4.0"
 val RefinedVersion = "0.9.0"
 
 // @formatter:off
-lazy val deps = Seq(
+libraryDependencies ++= Seq(
   "com.typesafe.akka"           %% "akka-stream"              % AkkaVersion,
   "com.typesafe.akka"           %% "akka-stream-kafka"        % "0.22",
   "com.typesafe.scala-logging"  %% "scala-logging"            % "3.7.2",
