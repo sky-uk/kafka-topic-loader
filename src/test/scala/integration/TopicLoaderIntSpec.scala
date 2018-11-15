@@ -200,6 +200,11 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         "test-actor-system",
         ConfigFactory.parseString(
           s"""
+           |topic-loader {
+           |  idle-timeout = 1 second
+           |  buffer-size = 1
+           |  parallelism = 2
+           |}
            |akka {
            |  loglevel = "OFF"
            |  log-config-on-start = off
@@ -349,7 +354,8 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       probe.setAutoPilot((sender: ActorRef, msg: Any) =>
         msg match {
           case _ =>
-            Thread.sleep(delay.toMillis); sender ! response
+            Thread.sleep(delay.toMillis)
+            sender ! response
             TestActor.KeepRunning
       })
       probe
