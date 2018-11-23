@@ -16,7 +16,7 @@ import cats.syntax.show._
 import cats.{Always, Show}
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.kafka.clients.consumer._
-import org.apache.kafka.common.serialization.{Deserializer, StringDeserializer}
+import org.apache.kafka.common.serialization.{ByteArrayDeserializer, Deserializer, StringDeserializer}
 import org.apache.kafka.common.{PartitionInfo, TopicPartition}
 
 import scala.collection.JavaConverters._
@@ -44,7 +44,7 @@ object TopicLoader extends LazyLogging {
     import system.dispatcher
 
     def earliestOffsets(topic: String,
-                        consumer: Consumer[String, T],
+                        consumer: Consumer[String, Array[Byte]],
                         beginningOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
       consumer
         .partitionsFor(topic)
@@ -58,7 +58,7 @@ object TopicLoader extends LazyLogging {
     val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
 
     val settings =
-      ConsumerSettings(system, new StringDeserializer, valueDeserializer)
+      ConsumerSettings(system, new StringDeserializer, new ByteArrayDeserializer)
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
@@ -106,6 +106,7 @@ object TopicLoader extends LazyLogging {
             .plainSource(settings, Subscriptions.assignmentWithOffset(lowestOffsets))
             .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
             .idleTimeout(config.idleTimeout)
+            .map(deserializeValue(_, valueDeserializer))
             .via(filterBelowHighestOffset)
             .mapAsync(config.parallelism.value)(handleRecord)
             .mapMaterializedValue(logResult(_, topics))
@@ -114,6 +115,22 @@ object TopicLoader extends LazyLogging {
 
     offsetsSource.flatMapConcat(topicDataSource)
   }
+
+  private def deserializeValue[T](cr: ConsumerRecord[String, Array[Byte]],
+                                  valueDeserializer: Deserializer[T]): ConsumerRecord[String, T] =
+    new ConsumerRecord[String, T](
+      cr.topic,
+      cr.partition,
+      cr.offset,
+      cr.timestamp,
+      cr.timestampType,
+      ConsumerRecord.NULL_CHECKSUM,
+      cr.serializedKeySize,
+      cr.serializedValueSize,
+      cr.key,
+      valueDeserializer.deserialize(cr.topic, cr.value),
+      cr.headers
+    )
 
   private def emitRecordRemovingConsumedPartition[T](t: HighestOffsetsWithRecord[T],
                                                      r: ConsumerRecord[String, T]): HighestOffsetsWithRecord[T] = {
