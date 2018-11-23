@@ -125,10 +125,10 @@ object TopicLoader extends LazyLogging {
       cr.timestamp,
       cr.timestampType,
       ConsumerRecord.NULL_CHECKSUM,
-      cr.serializedValueSize,
       cr.serializedKeySize,
+      cr.serializedValueSize,
       cr.key,
-      valueDeserializer.deserialize(cr.topic, cr.value()),
+      valueDeserializer.deserialize(cr.topic, cr.value),
       cr.headers
     )
 
