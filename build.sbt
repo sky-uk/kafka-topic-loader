@@ -1,5 +1,5 @@
 organization := "com.sky"
-scalaVersion := "2.12.6"
+scalaVersion := "2.12.8"
 name := "kafka-topic-loader"
 
 scalacOptions ++= Seq(
@@ -29,9 +29,9 @@ bintrayRepository := "oss-maven"
 bintrayVcsUrl := Some("https://github.com/sky-uk/kafka-topic-loader")
 licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
-val AkkaVersion    = "2.5.10"
-val CatsVersion    = "1.4.0"
-val RefinedVersion = "0.9.0"
+val AkkaVersion    = "2.5.19"
+val CatsVersion    = "1.5.0"
+val RefinedVersion = "0.9.3"
 
 // @formatter:off
 libraryDependencies ++= Seq(
