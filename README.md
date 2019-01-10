@@ -1,27 +1,23 @@
 # kafka-topic-loader
-Loads the state of Kafka topics to populate your application on startup
+Reads the contents of provided Kafka topics, either the topics in their entirety or up until a consumer groups last committed Offset depending on which `LoadTopicStrategy` you provide.
 
-You should add the following to your `build.sbt`:
+Add the following to your `build.sbt`:
 ```scala
-libraryDependencies += "com.sky" %% "kafka-topic-loader" % "1.0.0"
+libraryDependencies += "com.sky" %% "kafka-topic-loader" % "1.2.4"
 
 resolvers += "bintray-sky-uk-oss-maven" at "https://dl.bintray.com/sky-uk/oss-maven"
 ```
 
 ```scala
-import com.sky.kafka.topicloader.TopicLoader.RunAfterSource     // for #runAfter
-
-val topicLoaderConfig = TopicLoaderConfig(LoadAll, topics, 2.minutes, parallelism = 2)
+val config = TopicLoaderConfig(idleTimeout = 2.minutes, bufferSize = 1000, parallelism = 2)
 
 val storeRecords: ConsumerRecord[String, SourceEntity] => Future[BusinessEntity] = {
-    /* store records in akka.Actor */
+    /* store records in akka.Actor for example */
 }
 
-def stream: Stream[Out] =
-    fromSource
-      .via(businessLogic)
-      .runAfter(TopicLoader(topicLoaderConfig, storeRecords, new LongDeserializer))
-
+val stream =
+    TopicLoader(config, storeRecords, new LongDeserializer)
+      .runWith(Sink.ignore)
 ```
 
 ## Configuring your consumer group.id
