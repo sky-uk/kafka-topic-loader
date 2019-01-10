@@ -15,15 +15,16 @@ import cats.syntax.option._
 import cats.syntax.show._
 import cats.{Always, Show}
 import com.typesafe.scalalogging.LazyLogging
+import eu.timepit.refined.pureconfig._
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, Deserializer, StringDeserializer}
 import org.apache.kafka.common.{PartitionInfo, TopicPartition}
+import pureconfig._
+import pureconfig.generic.auto._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
-import pureconfig._
-import eu.timepit.refined.pureconfig._
 
 object TopicLoader extends LazyLogging {
 
