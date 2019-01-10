@@ -43,6 +43,7 @@ libraryDependencies ++= Seq(
   "eu.timepit"                  %% "refined"                  % RefinedVersion,
   "eu.timepit"                  %% "refined-pureconfig"       % RefinedVersion,
   "com.sky"                     %% "akka-streams"             % "1.0.0",
+  "com.github.pureconfig"       %% "pureconfig"               % "0.10.1",
   "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,
   "org.scalatest"               %% "scalatest"                % "3.0.5"       % Test,
   "net.manub"                   %% "scalatest-embedded-kafka" % "1.1.0"       % Test
