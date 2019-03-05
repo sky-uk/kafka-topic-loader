@@ -28,6 +28,7 @@ import utils.RandomPort
 import eu.timepit.refined.auto._
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.Assertion
+import net.manub.embeddedkafka.Codecs.stringSerializer
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -37,6 +38,8 @@ import scala.concurrent.duration._
 class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
   override implicit val patienceConfig = PatienceConfig(20.seconds, 200.millis)
+
+  implicit val timeout = Timeout(5 seconds)
 
   "TopicLoader" should {
 
@@ -279,12 +282,30 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         loadTestTopic(LoadAll, failingHandler).failed.futureValue shouldBe boom
       }
     }
+
+    "emit last offsets consumed by topic loader" in new TestContext with KafkaConsumer {
+      val numPartitions = 5
+
+      withRunningKafka {
+        createCustomTopic(LoadStateTopic1, partitions = numPartitions)
+
+        publishToKafka(LoadStateTopic1, (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString))
+
+        val partitions = 1 to numPartitions map (partitionNumber =>
+          new TopicPartition(LoadStateTopic1, partitionNumber - 1))
+
+        withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
+          val highestOffsets = partitions.map(p => p -> consumer.position(p)).toMap
+
+          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1))
+            .runWith(Sink.head)
+            .futureValue shouldBe highestOffsets
+        }
+      }
+    }
   }
 
   trait TestContext extends AkkaSpecBase with EmbeddedKafka {
-
-    implicit val timeout          = Timeout(5 seconds)
-    implicit val stringSerializer = new StringSerializer
 
     implicit lazy val kafkaConfig =
       EmbeddedKafkaConfig(kafkaPort = RandomPort(), zooKeeperPort = RandomPort(), Map("log.roll.ms" -> "10"))
@@ -339,9 +360,14 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     val loadStrategy = Table("strategy", LoadAll, LoadCommitted)
 
+    def testTopicLoader(strategy: LoadTopicStrategy,
+                        topics: NonEmptyList[String],
+                        f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)) =
+      TopicLoader(strategy, topics, f, new StringDeserializer)
+
     def loadTestTopic(strategy: LoadTopicStrategy,
-                      f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)) =
-      TopicLoader(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), f, new StringDeserializer)
+                      f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)): Future[Done] =
+      testTopicLoader(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), f)
         .runWith(Sink.ignore)
 
     def createCustomTopics(topics: List[String], partitions: Int) =
@@ -395,7 +421,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
                                 offsetReset: String,
                                 topic: String,
                                 groupId: Option[String] = None)(f: Consumer[String, String] => T): T = {
-      val consumer = getConsumer(autoCommit, offsetReset, groupId)
+      val consumer = createConsumer(autoCommit, offsetReset, groupId)
       assignPartitions(consumer, topic)
       try {
         f(consumer)
@@ -417,7 +443,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       if (p.isEmpty) polled else consumeAllKafkaRecordsFromEarliestOffset(consumer, polled ++ p)
     }
 
-    def getConsumer(autoCommit: Boolean, offsetReset: String, groupId: Option[String]): Consumer[String, String] = {
+    def createConsumer(autoCommit: Boolean, offsetReset: String, groupId: Option[String]): Consumer[String, String] = {
 
       val baseSettings =
         ConsumerSettings(system, new StringDeserializer, new StringDeserializer)

@@ -37,10 +37,11 @@ object TopicLoader extends LazyLogging {
     * can be consumed using the `LoadCommitted` strategy.
     *
     */
-  def apply[T](strategy: LoadTopicStrategy,
-               topics: NonEmptyList[String],
-               onRecord: ConsumerRecord[String, T] => Future[_],
-               valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[_, _] = {
+  def apply[T](
+      strategy: LoadTopicStrategy,
+      topics: NonEmptyList[String],
+      onRecord: ConsumerRecord[String, T] => Future[_],
+      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
 
     import system.dispatcher
 
@@ -83,7 +84,7 @@ object TopicLoader extends LazyLogging {
         }
       }
 
-    def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[ConsumerRecord[String, T], _] = {
+    def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[Map[TopicPartition, LogOffsets], _] = {
       offsets.foreach { case (partition, offset) => logger.info(s"${offset.show} for $partition") }
 
       val nonEmptyOffsets   = offsets.filter { case (_, o) => o.highest > o.lowest }
@@ -110,11 +111,12 @@ object TopicLoader extends LazyLogging {
             .map(deserializeValue(_, valueDeserializer))
             .via(filterBelowHighestOffset)
             .mapAsync(config.parallelism.value)(handleRecord)
+            .map(_ => offsets)
             .mapMaterializedValue(logResult(_, topics))
       }
     }
 
-    offsetsSource.flatMapConcat(topicDataSource)
+    offsetsSource.flatMapConcat(topicDataSource).map(_.mapValues(_.highest))
   }
 
   private def deserializeValue[T](cr: ConsumerRecord[String, Array[Byte]],
