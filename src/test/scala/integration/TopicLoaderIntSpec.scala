@@ -13,6 +13,7 @@ import akka.util.Timeout
 import base.{AkkaSpecBase, WordSpecBase}
 import cats.data.NonEmptyList
 import cats.syntax.option._
+import cats.syntax.functor._
 import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
@@ -34,6 +35,7 @@ import scala.annotation.tailrec
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import cats.implicits.catsStdInstancesForList
 
 class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
@@ -284,18 +286,15 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     }
 
     "emit last offsets consumed by topic loader" in new TestContext with KafkaConsumer {
-      val numPartitions = 5
+      val partitions = 1 to 5 map (partitionNumber => new TopicPartition(LoadStateTopic1, partitionNumber - 1))
 
       withRunningKafka {
-        createCustomTopic(LoadStateTopic1, partitions = numPartitions)
+        createCustomTopic(LoadStateTopic1, partitions = partitions.size)
 
         publishToKafka(LoadStateTopic1, (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString))
 
-        val partitions = 1 to numPartitions map (partitionNumber =>
-          new TopicPartition(LoadStateTopic1, partitionNumber - 1))
-
         withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
-          val highestOffsets = partitions.map(p => p -> consumer.position(p)).toMap
+          val highestOffsets = partitions.toList.fproduct(consumer.position).toMap
 
           testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1))
             .runWith(Sink.head)
