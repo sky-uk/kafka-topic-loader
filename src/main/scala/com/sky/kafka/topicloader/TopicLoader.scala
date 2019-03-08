@@ -45,6 +45,13 @@ object TopicLoader extends LazyLogging {
 
     import system.dispatcher
 
+    val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
+
+    val settings =
+      ConsumerSettings(system, new StringDeserializer, new ByteArrayDeserializer)
+        .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+        .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+
     def earliestOffsets(topic: String,
                         consumer: Consumer[String, Array[Byte]],
                         beginningOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
@@ -57,12 +64,38 @@ object TopicLoader extends LazyLogging {
         }
         .toMap
 
-    val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
+    def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[Map[TopicPartition, LogOffsets], _] = {
+      offsets.foreach { case (partition, offset) => logger.info(s"${offset.show} for $partition") }
 
-    val settings =
-      ConsumerSettings(system, new StringDeserializer, new ByteArrayDeserializer)
-        .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-        .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+      val nonEmptyOffsets = offsets.filter { case (_, o) => o.highest > o.lowest }
+      val lowestOffsets   = nonEmptyOffsets.mapValues(_.lowest)
+      val allHighestOffsets: HighestOffsetsWithRecord[T] =
+        HighestOffsetsWithRecord[T](nonEmptyOffsets.mapValues(_.highest - 1))
+
+      val filterBelowHighestOffset =
+        Flow[ConsumerRecord[String, T]]
+          .scan(allHighestOffsets)(emitRecordRemovingConsumedPartition)
+          .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
+          .collect { case WithRecord(r) => r }
+
+      def handleRecord(r: ConsumerRecord[String, T]) = onRecord(r).map(_ => r)
+
+      nonEmptyOffsets.size match {
+        case 0 =>
+          logger.info(s"No data to load from ${topics.show}, will return current offsets")
+          Source.single(offsets)
+        case _ =>
+          Consumer
+            .plainSource(settings, Subscriptions.assignmentWithOffset(lowestOffsets))
+            .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
+            .idleTimeout(config.idleTimeout)
+            .map(deserializeValue(_, valueDeserializer))
+            .via(filterBelowHighestOffset)
+            .mapAsync(config.parallelism.value)(handleRecord)
+            .map(_ => offsets)
+            .mapMaterializedValue(logResult(_, topics))
+      }
+    }
 
     val offsetsSource: Source[Map[TopicPartition, LogOffsets], NotUsed] =
       lazySource {
@@ -83,38 +116,6 @@ object TopicLoader extends LazyLogging {
             .reduce(_ ++ _)
         }
       }
-
-    def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[Map[TopicPartition, LogOffsets], _] = {
-      offsets.foreach { case (partition, offset) => logger.info(s"${offset.show} for $partition") }
-
-      val nonEmptyOffsets   = offsets.filter { case (_, o) => o.highest > o.lowest }
-      val lowestOffsets     = nonEmptyOffsets.mapValues(_.lowest)
-      val allHighestOffsets = HighestOffsetsWithRecord[T](nonEmptyOffsets.mapValues(_.highest - 1))
-
-      val filterBelowHighestOffset =
-        Flow[ConsumerRecord[String, T]]
-          .scan(allHighestOffsets)(emitRecordRemovingConsumedPartition)
-          .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
-          .collect { case WithRecord(r) => r }
-
-      def handleRecord(r: ConsumerRecord[String, T]) = onRecord(r).map(_ => r)
-
-      nonEmptyOffsets.size match {
-        case 0 =>
-          logger.info(s"No data to load from ${topics.show}")
-          Source.empty
-        case _ =>
-          Consumer
-            .plainSource(settings, Subscriptions.assignmentWithOffset(lowestOffsets))
-            .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
-            .idleTimeout(config.idleTimeout)
-            .map(deserializeValue(_, valueDeserializer))
-            .via(filterBelowHighestOffset)
-            .mapAsync(config.parallelism.value)(handleRecord)
-            .map(_ => offsets)
-            .mapMaterializedValue(logResult(_, topics))
-      }
-    }
 
     offsetsSource.flatMapConcat(topicDataSource).map(_.mapValues(_.highest))
   }

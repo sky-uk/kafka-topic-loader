@@ -302,6 +302,21 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         }
       }
     }
+
+    "emit highest offsets even when not consumed anything" in new TestContext with KafkaConsumer {
+      val partitions = 1 to 5 map (partitionNumber => new TopicPartition(LoadStateTopic1, partitionNumber - 1))
+      withRunningKafka {
+        createCustomTopic(LoadStateTopic1, partitions = partitions.size)
+
+        withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
+          val highestOffsets = partitions.toList.fproduct(consumer.position).toMap
+
+          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1))
+            .runWith(Sink.head)
+            .futureValue shouldBe highestOffsets
+        }
+      }
+    }
   }
 
   trait TestContext extends AkkaSpecBase with EmbeddedKafka {
