@@ -7,8 +7,8 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
-import akka.stream.OverflowStrategy
-import akka.stream.scaladsl.{Flow, Source}
+import akka.stream.{KillSwitch, KillSwitches, OverflowStrategy}
+import akka.stream.scaladsl.{Flow, Keep, Source}
 import cats.data.NonEmptyList
 import cats.instances.string.catsStdShowForString
 import cats.syntax.option._
@@ -85,15 +85,18 @@ object TopicLoader extends LazyLogging {
           logger.info(s"No data to load from ${topics.show}, will return current offsets")
           Source.single(offsets)
         case _ =>
-          Consumer
-            .plainSource(settings, Subscriptions.assignmentWithOffset(lowestOffsets))
-            .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
-            .idleTimeout(config.idleTimeout)
-            .map(deserializeValue(_, valueDeserializer))
-            .via(filterBelowHighestOffset)
-            .mapAsync(config.parallelism.value)(handleRecord)
-            .map(_ => offsets)
-            .mapMaterializedValue(logResult(_, topics))
+          import SourceOps._
+          Source.single(offsets).runAfter {
+            Consumer
+              .plainSource(settings, Subscriptions.assignmentWithOffset(lowestOffsets))
+              .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
+              .idleTimeout(config.idleTimeout)
+              .map(deserializeValue(_, valueDeserializer))
+              .via(filterBelowHighestOffset)
+              .mapAsync(config.parallelism.value)(handleRecord)
+              .map(_ => offsets)
+              .mapMaterializedValue(logResult(_, topics))
+          }
       }
     }
 
@@ -187,4 +190,30 @@ object TopicLoader extends LazyLogging {
 
   private implicit val showLogOffsets: Show[LogOffsets] = o =>
     s"LogOffsets(lowest = ${o.lowest}, highest = ${o.highest})"
+}
+
+object SourceOps {
+
+  implicit class RunAfterSource[T1, M1](val s2: Source[T1, M1]) extends AnyVal {
+
+    /**
+      * Prepend s1 Source to s2 Source, returning the source that will run them in order, after the s1 Source
+      * ends its result is discarded. Source s1 won't be materialized until s2 completes.
+      */
+    def runAfter[T2, M2](s1: Source[T2, M2]): Source[T1, KillSwitch] =
+      s2.map(EventAction(_))
+        .prependLazily(s1.map(_ => Ignore))
+        .collect { case Emit(t) => t }
+        .viaMat(KillSwitches.single)(Keep.right)
+
+    def prependLazily[M2](s1: => Source[T1, M2]): Source[T1, NotUsed] =
+      Source(List(() => s1, () => s2)).flatMapConcat(_.apply)
+  }
+
+  private sealed trait EventAction[+T]      extends Product with Serializable
+  private case object Ignore                extends EventAction[Nothing]
+  private final case class Emit[T](elem: T) extends EventAction[T]
+  private object EventAction {
+    def apply[T](value: T): EventAction[T] = Emit(value)
+  }
 }
