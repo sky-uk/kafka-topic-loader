@@ -92,7 +92,7 @@ object TopicLoader extends LazyLogging {
             .map(deserializeValue(_, valueDeserializer))
             .via(filterBelowHighestOffset)
             .mapAsync(config.parallelism.value)(handleRecord)
-            .map(_ => offsets)
+            .fold(offsets) { case (offset, _) => offset }
             .mapMaterializedValue(logResult(_, topics))
       }
     }
