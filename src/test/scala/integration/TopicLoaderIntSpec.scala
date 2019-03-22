@@ -37,6 +37,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import cats.implicits.catsStdInstancesForList
 
+import scala.collection.mutable.MutableList
+
 class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
   override implicit val patienceConfig = PatienceConfig(20.seconds, 200.millis)
@@ -295,10 +297,14 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
         withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
           val highestOffsets = partitions.toList.fproduct(consumer.position).toMap
+          val loaded         = new MutableList[Boolean]
 
-          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1))
-            .runWith(Sink.head)
-            .futureValue shouldBe highestOffsets
+          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1), _ => { loaded += false; Future.unit })
+            .map(offsets => { loaded += true; offsets })
+            .runWith(Sink.seq)
+            .futureValue should contain theSameElementsAs Seq(highestOffsets)
+
+          loaded.last shouldBe true
         }
       }
     }
@@ -311,7 +317,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
         withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
           val highestOffsets = partitions.toList.fproduct(consumer.position).toMap
 
-          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1))
+          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1), _ => Future.unit)
             .runWith(Sink.head)
             .futureValue shouldBe highestOffsets
         }
@@ -374,9 +380,9 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     val loadStrategy = Table("strategy", LoadAll, LoadCommitted)
 
-    def testTopicLoader(strategy: LoadTopicStrategy,
-                        topics: NonEmptyList[String],
-                        f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)) =
+    def testTopicLoader[T](strategy: LoadTopicStrategy,
+                           topics: NonEmptyList[String],
+                           f: ConsumerRecord[String, String] => Future[T]) =
       TopicLoader(strategy, topics, f, new StringDeserializer)
 
     def loadTestTopic(strategy: LoadTopicStrategy,
