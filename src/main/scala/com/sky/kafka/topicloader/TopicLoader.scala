@@ -42,10 +42,8 @@ object TopicLoader extends LazyLogging {
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
 
-    val partitionsFromTopics: Consumer[String, _] => NonEmptyList[TopicPartition] = c =>
-      NonEmptyList.fromListUnsafe {
-        topics.toList.flatMap(t => c.partitionsFor(t).asScala.map(p => new TopicPartition(t, p.partition)))
-    }
+    val partitionsFromTopics: Consumer[String, _] => List[TopicPartition] = c =>
+      topics.toList.flatMap(t => c.partitionsFor(t).asScala.map(p => new TopicPartition(t, p.partition)))
 
     TopicLoader(strategy, partitionsFromTopics, onRecord, valueDeserializer)
   }
@@ -64,11 +62,11 @@ object TopicLoader extends LazyLogging {
       partitions: NonEmptyList[TopicPartition],
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] =
-    TopicLoader(strategy, _ => partitions, onRecord, valueDeserializer)
+    TopicLoader(strategy, _ => partitions.toList, onRecord, valueDeserializer)
 
   private def apply[T](
       strategy: LoadTopicStrategy,
-      partitions: Consumer[String, _] => NonEmptyList[TopicPartition],
+      partitions: Consumer[String, _] => List[TopicPartition],
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
 
@@ -188,9 +186,9 @@ object TopicLoader extends LazyLogging {
     }
   }
 
-  private def getOffsets(partitions: NonEmptyList[TopicPartition])(
+  private def getOffsets(partitions: List[TopicPartition])(
       f: JList[TopicPartition] => JMap[TopicPartition, JLong]): Map[TopicPartition, Long] =
-    f(partitions.toList.asJava).asScala.toMap.mapValues(_.longValue)
+    f(partitions.asJava).asScala.toMap.mapValues(_.longValue)
 
   private case class LogOffsets(lowest: Long, highest: Long)
 
