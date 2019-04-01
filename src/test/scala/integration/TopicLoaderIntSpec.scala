@@ -49,14 +49,13 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     "update store records with entire state of provided topics using full log strategy" in new TestContext
     with CountingRecordStore {
-      val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
+      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
 
       withRunningKafka {
         createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
 
-        publishToKafka(LoadStateTopic1, records)
-        publishToKafka(LoadStateTopic2, records)
+        publishToKafka(LoadStateTopic1, recordsToPublish)
+        publishToKafka(LoadStateTopic2, recordsToPublish)
 
         whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded.get() shouldBe 30)
       }
@@ -64,15 +63,14 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     "update store records with state of provided topics using last consumer commit strategy" in new TestContext
     with KafkaConsumer with CountingRecordStore {
-      val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
+      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
 
       withRunningKafka {
         createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
 
-        publishToKafka(LoadStateTopic1, records.take(11))
+        publishToKafka(LoadStateTopic1, recordsToPublish.take(11))
         moveOffsetToEnd(LoadStateTopic1)
-        publishToKafka(LoadStateTopic1, records.takeRight(4))
+        publishToKafka(LoadStateTopic1, recordsToPublish.takeRight(4))
 
         whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded.get() shouldBe 11)
       }
@@ -80,13 +78,12 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     "update store records when a topic is empty for the LoadAll strategy" in new TestContext with KafkaConsumer
     with CountingRecordStore {
-      val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
+      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
 
       withRunningKafka {
         createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
 
-        publishToKafka(LoadStateTopic1, records)
+        publishToKafka(LoadStateTopic1, recordsToPublish)
 
         whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded.get() shouldBe 15)
       }
@@ -94,13 +91,12 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     "update store records when a topic is empty for the LoadCommitted strategy" in new TestContext with KafkaConsumer
     with CountingRecordStore {
-      val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
+      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
 
       withRunningKafka {
         createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
 
-        publishToKafka(LoadStateTopic1, records)
+        publishToKafka(LoadStateTopic1, recordsToPublish)
         moveOffsetToEnd(LoadStateTopic1)
 
         whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded.get() shouldBe 15)
@@ -120,10 +116,11 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     "load data only from required partitions" in new TestContext with KafkaConsumer {
       val partitionsToRead = NonEmptyList.of(1, 2)
       val topicPartitions  = partitionsToRead.map(p => new TopicPartition(LoadStateTopic1, p))
+      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
 
       withRunningKafka {
         createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-        publishToKafka(LoadStateTopic1, (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString))
+        publishToKafka(LoadStateTopic1, recordsToPublish)
         moveOffsetToEnd(LoadStateTopic1)
 
         forEvery(loadStrategy) { strategy =>
@@ -137,17 +134,16 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     }
 
     "read always from LOG-BEGINNING-OFFSETS" in new TestContext with KafkaConsumer {
-      val records =
-        (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
+      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
 
       forEvery(loadStrategy) { strategy =>
         withRunningKafka {
           createCustomTopic(LoadStateTopic1, partitions = 5)
-          publishToKafka(LoadStateTopic1, records)
+          publishToKafka(LoadStateTopic1, recordsToPublish)
 
           val count = withAssignedConsumer(true, offsetReset = "earliest", LoadStateTopic1)(
             consumeAllKafkaRecordsFromEarliestOffset(_).size)
-          count shouldBe records.size
+          count shouldBe recordsToPublish.size
 
           loadTestTopic(strategy).futureValue shouldBe Done
         }
@@ -250,11 +246,10 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       val slowProbe = delayedProbe(100.millis, Unit)
 
       val result = withRunningKafka {
-        val records =
-          (1 to 5).toList.map(UUID.randomUUID().toString -> _.toString)
+        val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
 
         createCustomTopic(LoadStateTopic1, partitions = 12)
-        publishToKafka(LoadStateTopic1, records)
+        publishToKafka(LoadStateTopic1, recordsToPublish)
 
         val callSlowProbe: ConsumerRecord[String, String] => Future[Int] = _ => (slowProbe.ref ? 123).map(_ => 0)
 
@@ -307,12 +302,13 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     }
 
     "emit last offsets consumed by topic loader" in new TestContext with KafkaConsumer {
-      val partitions = 1 to 5 map (partitionNumber => new TopicPartition(LoadStateTopic1, partitionNumber - 1))
+      val partitions       = 1 to 5 map (partitionNumber => new TopicPartition(LoadStateTopic1, partitionNumber - 1))
+      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
 
       withRunningKafka {
         createCustomTopic(LoadStateTopic1, partitions = partitions.size)
 
-        publishToKafka(LoadStateTopic1, (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString))
+        publishToKafka(LoadStateTopic1, recordsToPublish)
 
         withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
           val highestOffsets = partitions.toList.fproduct(consumer.position).toMap

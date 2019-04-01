@@ -43,7 +43,10 @@ object TopicLoader extends LazyLogging {
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
 
     val partitionsFromTopics: Consumer[String, _] => List[TopicPartition] = c =>
-      topics.toList.flatMap(t => c.partitionsFor(t).asScala.map(p => new TopicPartition(t, p.partition)))
+      for {
+        t <- topics.toList
+        p <- c.partitionsFor(t).asScala
+      } yield new TopicPartition(t, p.partition)
 
     TopicLoader(strategy, partitionsFromTopics, onRecord, valueDeserializer)
   }
@@ -66,7 +69,7 @@ object TopicLoader extends LazyLogging {
 
   private def apply[T](
       strategy: LoadTopicStrategy,
-      partitions: Consumer[String, _] => List[TopicPartition],
+      requiredPartitions: Consumer[String, _] => List[TopicPartition],
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
 
@@ -119,14 +122,12 @@ object TopicLoader extends LazyLogging {
     val offsetsSourceFor: Source[Map[TopicPartition, LogOffsets], NotUsed] =
       lazySource {
         withStandaloneConsumer(settings) { c =>
-          val requiredPartitions = partitions(c)
-          val offsets            = getOffsets(requiredPartitions) _
-          val beginningOffsets   = offsets(c.beginningOffsets)
-          val partitionToLong = strategy match {
+          val offsets          = getOffsets(requiredPartitions(c)) _
+          val beginningOffsets = offsets(c.beginningOffsets)
+          val endOffsets = strategy match {
             case LoadAll       => offsets(c.endOffsets)
             case LoadCommitted => earliestOffsets(c, beginningOffsets)
           }
-          val endOffsets = partitionToLong
           beginningOffsets.map {
             case (k, v) => k -> LogOffsets(v, endOffsets(k))
           }
