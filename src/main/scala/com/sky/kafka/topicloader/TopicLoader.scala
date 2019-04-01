@@ -53,17 +53,9 @@ object TopicLoader extends LazyLogging {
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
-    def earliestOffsets(topic: String,
-                        consumer: Consumer[String, Array[Byte]],
+    def earliestOffsets(consumer: Consumer[String, Array[Byte]],
                         beginningOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
-      consumer
-        .partitionsFor(topic)
-        .asScala
-        .map { i =>
-          val p = new TopicPartition(topic, i.partition)
-          p -> Option(consumer.committed(p)).fold(beginningOffsets(p))(_.offset)
-        }
-        .toMap
+      beginningOffsets.keys.map(p => p -> Option(consumer.committed(p)).fold(beginningOffsets(p))(_.offset)).toMap
 
     def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[Map[TopicPartition, LogOffsets], _] = {
       offsets.foreach { case (partition, offset) => logger.info(s"${offset.show} for $partition") }
@@ -98,15 +90,17 @@ object TopicLoader extends LazyLogging {
       }
     }
 
-    def offsetsSource(partitions: Option[NonEmptyList[Int]]): Source[Map[TopicPartition, LogOffsets], NotUsed] =
+    def offsetsSourceFor(partitions: Option[NonEmptyList[Int]]): Source[Map[TopicPartition, LogOffsets], NotUsed] =
       lazySource {
         withStandaloneConsumer(settings) { c =>
           topics.map { topic =>
-            val offsets          = getOffsets(new TopicPartition(topic, _: Int), c.partitionsFor(topic)) _
+            val requiredPartitions =
+              c.partitionsFor(topic).asScala.filter(tp => partitions.fold(true)(_.toList.contains(tp.partition)))
+            val offsets          = getOffsets(new TopicPartition(topic, _: Int), requiredPartitions.asJava) _
             val beginningOffsets = offsets(c.beginningOffsets)
             val partitionToLong = strategy match {
               case LoadAll       => offsets(c.endOffsets)
-              case LoadCommitted => earliestOffsets(topic, c, beginningOffsets)
+              case LoadCommitted => earliestOffsets(c, beginningOffsets)
             }
             val endOffsets = partitionToLong
             beginningOffsets.map {
@@ -114,11 +108,10 @@ object TopicLoader extends LazyLogging {
             }
           }.toList
             .reduce(_ ++ _)
-            .filter { case (tp, _) => partitions.fold(true)(p => p.toList.contains(tp.partition)) }
         }
       }
 
-    offsetsSource(partitions).flatMapConcat(topicDataSource).map(_.mapValues(_.highest))
+    offsetsSourceFor(partitions).flatMapConcat(topicDataSource).map(_.mapValues(_.highest))
   }
 
   private def deserializeValue[T](cr: ConsumerRecord[String, Array[Byte]],
