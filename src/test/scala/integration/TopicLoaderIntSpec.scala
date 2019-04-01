@@ -399,11 +399,10 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     val loadStrategy = Table("strategy", LoadAll, LoadCommitted)
 
-    // TODO: Can this be inlined?
     def testTopicLoader[T](strategy: LoadTopicStrategy,
                            topics: NonEmptyList[String],
                            f: ConsumerRecord[String, String] => Future[T]) =
-      TopicLoader(strategy, FromTopics(topics), f, new StringDeserializer)
+      TopicLoader.fromTopics(strategy, topics, f, new StringDeserializer)
 
     def loadTestTopic(strategy: LoadTopicStrategy,
                       f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)): Future[Done] =
@@ -412,7 +411,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     def loadPartitions(strategy: LoadTopicStrategy,
                        partitions: NonEmptyList[TopicPartition],
                        f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)): Future[Done] =
-      TopicLoader(strategy, FromPartitions(partitions), f, new StringDeserializer).runWith(Sink.ignore)
+      TopicLoader.fromPartitions(strategy, partitions, f, new StringDeserializer).runWith(Sink.ignore)
 
     def createCustomTopics(topics: List[String], partitions: Int) =
       topics.foreach(createCustomTopic(_, partitions = partitions))

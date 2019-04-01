@@ -36,25 +36,37 @@ object TopicLoader extends LazyLogging {
     * can be consumed using the `LoadCommitted` strategy.
     *
     */
-  def apply[T](
+  def fromTopics[T](
       strategy: LoadTopicStrategy,
-      source: SourceStrategy,
+      topics: NonEmptyList[String],
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
-    val getPartitions: Consumer[String, _] => NonEmptyList[TopicPartition] = source match {
-      case FromPartitions(partitions) =>
-        _ =>
-          partitions
-      case FromTopics(topics) =>
-        c =>
-          NonEmptyList.fromListUnsafe {
-            topics.toList.flatMap(t => c.partitionsFor(t).asScala.map(p => new TopicPartition(t, p.partition)))
-          }
+
+    val partitionsFromTopics: Consumer[String, _] => NonEmptyList[TopicPartition] = c =>
+      NonEmptyList.fromListUnsafe {
+        topics.toList.flatMap(t => c.partitionsFor(t).asScala.map(p => new TopicPartition(t, p.partition)))
     }
-    create(strategy, getPartitions, onRecord, valueDeserializer)
+
+    TopicLoader(strategy, partitionsFromTopics, onRecord, valueDeserializer)
   }
 
-  def create[T](
+  /**
+    * Consumes the records from the provided partitions, passing them through `onRecord`.
+    *
+    * @param strategy
+    * All records on a partition can be consumed using the `LoadAll` strategy.
+    * All records up to the last committed offset of the configured `group.id` (provided in your application.conf)
+    * can be consumed using the `LoadCommitted` strategy.
+    *
+    */
+  def fromPartitions[T](
+      strategy: LoadTopicStrategy,
+      partitions: NonEmptyList[TopicPartition],
+      onRecord: ConsumerRecord[String, T] => Future[_],
+      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] =
+    TopicLoader(strategy, _ => partitions, onRecord, valueDeserializer)
+
+  private def apply[T](
       strategy: LoadTopicStrategy,
       partitions: Consumer[String, _] => NonEmptyList[TopicPartition],
       onRecord: ConsumerRecord[String, T] => Future[_],
@@ -134,7 +146,7 @@ object TopicLoader extends LazyLogging {
       cr.offset,
       cr.timestamp,
       cr.timestampType,
-      ConsumerRecord.NULL_CHECKSUM,
+      ConsumerRecord.NULL_CHECKSUM.toLong,
       cr.serializedKeySize,
       cr.serializedValueSize,
       cr.key,

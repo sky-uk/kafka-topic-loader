@@ -3,7 +3,7 @@ package unit
 import akka.actor.ActorSystem
 import base.WordSpecBase
 import cats.data.NonEmptyList
-import com.sky.kafka.topicloader.{FromTopics, LoadAll, TopicLoader}
+import com.sky.kafka.topicloader.{LoadAll, TopicLoader}
 import com.typesafe.config.ConfigFactory
 import org.apache.kafka.common.serialization.StringDeserializer
 
@@ -19,7 +19,7 @@ class TopicLoaderSpec extends WordSpecBase {
       )
 
       assertThrows[IllegalArgumentException](
-        TopicLoader[String](LoadAll, FromTopics(NonEmptyList.one("")), Future.successful, new StringDeserializer)(
+        TopicLoader.fromTopics[String](LoadAll, NonEmptyList.one(""), Future.successful, new StringDeserializer)(
           ActorSystem("", invalidConfig)))
     }
   }
