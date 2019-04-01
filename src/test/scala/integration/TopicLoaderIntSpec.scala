@@ -117,6 +117,24 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       }
     }
 
+    "load data only from required partitions" in new TestContext with KafkaConsumer {
+      val partitionsToLoadDataFrom = NonEmptyList.of(1, 2)
+
+      withRunningKafka {
+        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
+        publishToKafka(LoadStateTopic1, (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString))
+        moveOffsetToEnd(LoadStateTopic1)
+
+        forEvery(loadStrategy) { strategy =>
+          val store = new RecordStore()
+
+          loadTestTopic(strategy, store.storeRecord, partitions = partitionsToLoadDataFrom.some).futureValue shouldBe Done
+
+          store.getRecords.futureValue.map(_.partition) should contain only (partitionsToLoadDataFrom.toList: _*)
+        }
+      }
+    }
+
     "read always from LOG-BEGINNING-OFFSETS" in new TestContext with KafkaConsumer {
       val records =
         (1 to 15).toList.map(UUID.randomUUID().toString -> _.toString)
@@ -382,12 +400,14 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
 
     def testTopicLoader[T](strategy: LoadTopicStrategy,
                            topics: NonEmptyList[String],
-                           f: ConsumerRecord[String, String] => Future[T]) =
-      TopicLoader(strategy, topics, f, new StringDeserializer)
+                           f: ConsumerRecord[String, String] => Future[T],
+                           partitions: Option[NonEmptyList[Int]] = None) =
+      TopicLoader(strategy, topics, f, new StringDeserializer, partitions)
 
     def loadTestTopic(strategy: LoadTopicStrategy,
-                      f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)): Future[Done] =
-      testTopicLoader(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), f)
+                      f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0),
+                      partitions: Option[NonEmptyList[Int]] = None): Future[Done] =
+      testTopicLoader(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), f, partitions)
         .runWith(Sink.ignore)
 
     def createCustomTopics(topics: List[String], partitions: Int) =

@@ -37,11 +37,12 @@ object TopicLoader extends LazyLogging {
     * can be consumed using the `LoadCommitted` strategy.
     *
     */
-  def apply[T](
-      strategy: LoadTopicStrategy,
-      topics: NonEmptyList[String],
-      onRecord: ConsumerRecord[String, T] => Future[_],
-      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
+  def apply[T](strategy: LoadTopicStrategy,
+               topics: NonEmptyList[String],
+               onRecord: ConsumerRecord[String, T] => Future[_],
+               valueDeserializer: Deserializer[T],
+               partitions: Option[NonEmptyList[Int]] = None)(
+      implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
 
     import system.dispatcher
 
@@ -97,12 +98,11 @@ object TopicLoader extends LazyLogging {
       }
     }
 
-    val offsetsSource: Source[Map[TopicPartition, LogOffsets], NotUsed] =
+    def offsetsSource(partitions: Option[NonEmptyList[Int]]): Source[Map[TopicPartition, LogOffsets], NotUsed] =
       lazySource {
         withStandaloneConsumer(settings) { c =>
           topics.map { topic =>
-            val offsets =
-              getOffsets(new TopicPartition(topic, _: Int), c.partitionsFor(topic)) _
+            val offsets          = getOffsets(new TopicPartition(topic, _: Int), c.partitionsFor(topic)) _
             val beginningOffsets = offsets(c.beginningOffsets)
             val partitionToLong = strategy match {
               case LoadAll       => offsets(c.endOffsets)
@@ -114,10 +114,11 @@ object TopicLoader extends LazyLogging {
             }
           }.toList
             .reduce(_ ++ _)
+            .filter { case (tp, _) => partitions.fold(true)(p => p.toList.contains(tp.partition)) }
         }
       }
 
-    offsetsSource.flatMapConcat(topicDataSource).map(_.mapValues(_.highest))
+    offsetsSource(partitions).flatMapConcat(topicDataSource).map(_.mapValues(_.highest))
   }
 
   private def deserializeValue[T](cr: ConsumerRecord[String, Array[Byte]],
