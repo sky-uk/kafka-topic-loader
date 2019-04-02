@@ -119,7 +119,7 @@ object TopicLoader extends LazyLogging {
       }
     }
 
-    val offsetsSourceFor: Source[Map[TopicPartition, LogOffsets], NotUsed] =
+    val offsetsSource: Source[Map[TopicPartition, LogOffsets], NotUsed] =
       lazySource {
         withStandaloneConsumer(settings) { c =>
           val offsets          = getOffsets(requiredPartitions(c)) _
@@ -134,7 +134,7 @@ object TopicLoader extends LazyLogging {
         }
       }
 
-    offsetsSourceFor.flatMapConcat(topicDataSource).map(_.mapValues(_.highest))
+    offsetsSource.flatMapConcat(topicDataSource).map(_.mapValues(_.highest))
   }
 
   private def deserializeValue[T](cr: ConsumerRecord[String, Array[Byte]],
