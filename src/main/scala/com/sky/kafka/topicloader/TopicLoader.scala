@@ -6,7 +6,7 @@ import java.util.{List => JList, Map => JMap}
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
-import akka.kafka.{ConsumerSettings, Subscriptions}
+import akka.kafka.{ConsumerMessage, ConsumerSettings, Subscriptions}
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Flow, Source}
 import cats.data.NonEmptyList
@@ -16,7 +16,7 @@ import cats.{Always, Show}
 import com.typesafe.scalalogging.LazyLogging
 import eu.timepit.refined.pureconfig._
 import org.apache.kafka.clients.consumer._
-import org.apache.kafka.common.serialization.{ByteArrayDeserializer, Deserializer, StringDeserializer}
+import org.apache.kafka.common.serialization.{ByteArrayDeserializer, Deserializer, LongDeserializer, StringDeserializer}
 import org.apache.kafka.common.TopicPartition
 import pureconfig._
 import pureconfig.generic.auto._
@@ -206,4 +206,30 @@ object TopicLoader extends LazyLogging {
 
   private implicit val showTopicPartitions: Show[Iterable[TopicPartition]] =
     _.map(tp => s"${tp.topic}:${tp.partition}").mkString(", ")
+}
+
+object lol {
+  implicit val as: ActorSystem = ActorSystem()
+
+  val consumerSettings: ConsumerSettings[String, Long]              = ???
+  val doBusinessLogic: ConsumerRecord[String, Long] => Future[Unit] = ???
+
+  val stream: Source[ConsumerMessage.CommittableMessage[String, Long], Consumer.Control] = Consumer
+    .committablePartitionedSource(consumerSettings, Subscriptions.topics("topic-to-load"))
+    .flatMapConcat {
+      case (topicPartition, source) =>
+        TopicLoader
+          .fromPartitions(LoadAll, NonEmptyList.one(topicPartition), doBusinessLogic, new LongDeserializer)
+          .flatMapConcat(_ => source)
+    }
+
+  /*
+    NUMERS mean preloaded data
+    c1 : 0,1, c2: 2,3, c3: 4,5  listening on 0,1, c2: 2,3, c3: 4,5
+    c3 dies
+    c1: 0,1,4, c2: 2,3,5  listening on 0,1,4, c2: 2,3,5
+    c3 is back !
+    c1: preloaded 0,1,4, c2: 2,3,5, c3: 4,5  listening on 0,1, c2: 2,3, c3: 4,5
+    c3 gets update on P4, c1 still keeps old event
+   */
 }
