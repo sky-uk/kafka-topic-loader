@@ -204,5 +204,6 @@ object TopicLoader extends LazyLogging {
   private implicit val showLogOffsets: Show[LogOffsets] = o =>
     s"LogOffsets(lowest = ${o.lowest}, highest = ${o.highest})"
 
-  private implicit val showOffsets: Show[Iterable[TopicPartition]] = _.map(_.topic).mkString(",")
+  private implicit val showTopicPartitions: Show[Iterable[TopicPartition]] =
+    _.map(tp => s"${tp.topic}:${tp.partition}").mkString(", ")
 }
