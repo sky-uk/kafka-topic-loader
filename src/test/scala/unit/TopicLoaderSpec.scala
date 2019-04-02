@@ -19,7 +19,7 @@ class TopicLoaderSpec extends WordSpecBase {
       )
 
       assertThrows[IllegalArgumentException](
-        TopicLoader[String](LoadAll, NonEmptyList.one(""), Future.successful, new StringDeserializer)(
+        TopicLoader.fromTopics[String](LoadAll, NonEmptyList.one(""), Future.successful, new StringDeserializer)(
           ActorSystem("", invalidConfig)))
     }
   }

@@ -6,19 +6,18 @@ import java.util.{List => JList, Map => JMap}
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
-import akka.kafka.{ConsumerSettings, Subscriptions}
+import akka.kafka.{ConsumerMessage, ConsumerSettings, Subscriptions}
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Flow, Source}
 import cats.data.NonEmptyList
-import cats.instances.string.catsStdShowForString
 import cats.syntax.option._
 import cats.syntax.show._
 import cats.{Always, Show}
 import com.typesafe.scalalogging.LazyLogging
 import eu.timepit.refined.pureconfig._
 import org.apache.kafka.clients.consumer._
-import org.apache.kafka.common.serialization.{ByteArrayDeserializer, Deserializer, StringDeserializer}
-import org.apache.kafka.common.{PartitionInfo, TopicPartition}
+import org.apache.kafka.common.serialization.{ByteArrayDeserializer, Deserializer, LongDeserializer, StringDeserializer}
+import org.apache.kafka.common.TopicPartition
 import pureconfig._
 import pureconfig.generic.auto._
 
@@ -37,9 +36,40 @@ object TopicLoader extends LazyLogging {
     * can be consumed using the `LoadCommitted` strategy.
     *
     */
-  def apply[T](
+  def fromTopics[T](
       strategy: LoadTopicStrategy,
       topics: NonEmptyList[String],
+      onRecord: ConsumerRecord[String, T] => Future[_],
+      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
+
+    val partitionsFromTopics: Consumer[String, _] => List[TopicPartition] = c =>
+      for {
+        t <- topics.toList
+        p <- c.partitionsFor(t).asScala
+      } yield new TopicPartition(t, p.partition)
+
+    TopicLoader(strategy, partitionsFromTopics, onRecord, valueDeserializer)
+  }
+
+  /**
+    * Consumes the records from the provided partitions, passing them through `onRecord`.
+    *
+    * @param strategy
+    * All records on a partition can be consumed using the `LoadAll` strategy.
+    * All records up to the last committed offset of the configured `group.id` (provided in your application.conf)
+    * can be consumed using the `LoadCommitted` strategy.
+    *
+    */
+  def fromPartitions[T](
+      strategy: LoadTopicStrategy,
+      partitions: NonEmptyList[TopicPartition],
+      onRecord: ConsumerRecord[String, T] => Future[_],
+      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] =
+    TopicLoader(strategy, _ => partitions.toList, onRecord, valueDeserializer)
+
+  private def apply[T](
+      strategy: LoadTopicStrategy,
+      requiredPartitions: Consumer[String, _] => List[TopicPartition],
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
 
@@ -52,17 +82,9 @@ object TopicLoader extends LazyLogging {
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
-    def earliestOffsets(topic: String,
-                        consumer: Consumer[String, Array[Byte]],
+    def earliestOffsets(consumer: Consumer[String, Array[Byte]],
                         beginningOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
-      consumer
-        .partitionsFor(topic)
-        .asScala
-        .map { i =>
-          val p = new TopicPartition(topic, i.partition)
-          p -> Option(consumer.committed(p)).fold(beginningOffsets(p))(_.offset)
-        }
-        .toMap
+      beginningOffsets.keys.map(p => p -> Option(consumer.committed(p)).fold(beginningOffsets(p))(_.offset)).toMap
 
     def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[Map[TopicPartition, LogOffsets], _] = {
       offsets.foreach { case (partition, offset) => logger.info(s"${offset.show} for $partition") }
@@ -82,7 +104,7 @@ object TopicLoader extends LazyLogging {
 
       nonEmptyOffsets.size match {
         case 0 =>
-          logger.info(s"No data to load from ${topics.show}, will return current offsets")
+          logger.info(s"No data to load from ${offsets.keys.show}, will return current offsets")
           Source.single(offsets)
         case _ =>
           Consumer
@@ -93,27 +115,22 @@ object TopicLoader extends LazyLogging {
             .via(filterBelowHighestOffset)
             .mapAsync(config.parallelism.value)(handleRecord)
             .fold(offsets) { case (offset, _) => offset }
-            .mapMaterializedValue(logResult(_, topics))
+            .mapMaterializedValue(logResult(_, offsets.keys))
       }
     }
 
     val offsetsSource: Source[Map[TopicPartition, LogOffsets], NotUsed] =
       lazySource {
         withStandaloneConsumer(settings) { c =>
-          topics.map { topic =>
-            val offsets =
-              getOffsets(new TopicPartition(topic, _: Int), c.partitionsFor(topic)) _
-            val beginningOffsets = offsets(c.beginningOffsets)
-            val partitionToLong = strategy match {
-              case LoadAll       => offsets(c.endOffsets)
-              case LoadCommitted => earliestOffsets(topic, c, beginningOffsets)
-            }
-            val endOffsets = partitionToLong
-            beginningOffsets.map {
-              case (k, v) => k -> LogOffsets(v, endOffsets(k))
-            }
-          }.toList
-            .reduce(_ ++ _)
+          val offsets          = getOffsets(requiredPartitions(c)) _
+          val beginningOffsets = offsets(c.beginningOffsets)
+          val endOffsets = strategy match {
+            case LoadAll       => offsets(c.endOffsets)
+            case LoadCommitted => earliestOffsets(c, beginningOffsets)
+          }
+          beginningOffsets.map {
+            case (k, v) => k -> LogOffsets(v, endOffsets(k))
+          }
         }
       }
 
@@ -128,7 +145,7 @@ object TopicLoader extends LazyLogging {
       cr.offset,
       cr.timestamp,
       cr.timestampType,
-      ConsumerRecord.NULL_CHECKSUM,
+      ConsumerRecord.NULL_CHECKSUM.toLong,
       cr.serializedKeySize,
       cr.serializedValueSize,
       cr.key,
@@ -150,10 +167,10 @@ object TopicLoader extends LazyLogging {
     HighestOffsetsWithRecord(updatedHighests, emittableRecord)
   }
 
-  private def logResult(control: Consumer.Control, topics: NonEmptyList[String])(implicit ec: ExecutionContext) = {
+  private def logResult(control: Consumer.Control, tps: Iterable[TopicPartition])(implicit ec: ExecutionContext) = {
     control.isShutdown.onComplete {
-      case Success(_) => logger.info(s"Successfully loaded data from ${topics.show}")
-      case Failure(t) => logger.error(s"Error occurred while loading data from ${topics.show}", t)
+      case Success(_) => logger.info(s"Successfully loaded data from ${tps.show}")
+      case Failure(t) => logger.error(s"Error occurred while loading data from ${tps.show}", t)
     }
     control
   }
@@ -170,10 +187,9 @@ object TopicLoader extends LazyLogging {
     }
   }
 
-  private def getOffsets(topicPartition: Int => TopicPartition, partitions: JList[PartitionInfo])(
+  private def getOffsets(partitions: List[TopicPartition])(
       f: JList[TopicPartition] => JMap[TopicPartition, JLong]): Map[TopicPartition, Long] =
-    f(partitions.asScala.map(p => topicPartition(p.partition)).asJava).asScala.toMap
-      .mapValues(_.longValue)
+    f(partitions.asJava).asScala.toMap.mapValues(_.longValue)
 
   private case class LogOffsets(lowest: Long, highest: Long)
 
@@ -187,4 +203,7 @@ object TopicLoader extends LazyLogging {
 
   private implicit val showLogOffsets: Show[LogOffsets] = o =>
     s"LogOffsets(lowest = ${o.lowest}, highest = ${o.highest})"
+
+  private implicit val showTopicPartitions: Show[Iterable[TopicPartition]] =
+    _.map(tp => s"${tp.topic}:${tp.partition}").mkString(", ")
 }
