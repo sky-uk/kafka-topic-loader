@@ -48,12 +48,13 @@ implicit val as: ActorSystem = ActorSystem()
 val consumerSettings: ConsumerSettings[String, Long]              = ???
 val doBusinessLogic: ConsumerRecord[String, Long] => Future[Unit] = ???
 
-val stream: Source[ConsumerMessage.CommittableMessage[String, Long], Consumer.Control] = Consumer
-.committablePartitionedSource(consumerSettings, Subscriptions.topics("topic-to-load"))
-.flatMapConcat {
-  case (topicPartition, source) =>
-    TopicLoader
-      .fromPartitions(LoadAll, NonEmptyList.one(topicPartition), doBusinessLogic, new LongDeserializer)
-      .flatMapConcat(_ => source)
+val stream: Source[ConsumerMessage.CommittableMessage[String, Long], Consumer.Control] =
+  Consumer
+    .committablePartitionedSource(consumerSettings, Subscriptions.topics("topic-to-load"))
+    .flatMapConcat {
+      case (topicPartition, source) =>
+        TopicLoader
+          .fromPartitions(LoadAll, NonEmptyList.one(topicPartition), doBusinessLogic, new LongDeserializer)
+          .flatMapConcat(_ => source)
 }
 ```
