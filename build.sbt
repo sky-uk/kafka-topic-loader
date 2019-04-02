@@ -52,3 +52,4 @@ libraryDependencies ++= Seq(
 
 addCommandAlias("checkFmt", ";scalafmt::test; test:scalafmt::test; sbt:scalafmt::test")
 addCommandAlias("runFmt", ";scalafmt; test:scalafmt; sbt:scalafmt")
+addCommandAlias("ciBuild", ";clean; test")
