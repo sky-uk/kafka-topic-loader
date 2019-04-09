@@ -103,7 +103,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       }
     }
 
-    "complete successfully if the topic is empty" in new TestContext {
+    "MOVED complete successfully if the topic is empty" in new TestContext {
       withRunningKafka {
         createCustomTopic(LoadStateTopic1, partitions = 10)
 
@@ -197,7 +197,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       }
     }
 
-    "throw if Kafka is unavailable at startup" in new TestContext {
+    "MOVED throw if Kafka is unavailable at startup" in new TestContext {
       override implicit lazy val system: ActorSystem = ActorSystem(
         "test-actor-system",
         ConfigFactory.parseString(
@@ -340,6 +340,45 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     }
   }
 
+  "loadingSource" should {
+    "fail if Kafka is unavailable at startup" in new TestContext {
+      override implicit lazy val system: ActorSystem = ActorSystem(
+        "test-actor-system",
+        ConfigFactory.parseString(
+          """
+            |akka.kafka.consumer.kafka-clients {
+            |  bootstrap.servers = "localhost:6001"
+            |  request.timeout.ms = 700
+            |  fetch.max.wait.ms = 500
+            |  session.timeout.ms = 500
+            |  heartbeat.interval.ms = 300
+            |}
+          """.stripMargin
+        )
+      )
+
+      TopicLoader
+        .loadingSource[String]( /*LoadAll, */ NonEmptyList.one(LoadStateTopic1))
+        .runWith(Sink.ignore)
+        .failed
+        .futureValue shouldBe a[TimeoutException]
+    }
+
+//    "complete successfully if the topic is empty" in new TestContext {
+//      withRunningKafka {
+//        createCustomTopic(LoadStateTopic1, partitions = 10)
+//
+//        //        forEvery(loadStrategy) { strategy =>
+//        TopicLoader
+//          .loadingSource[String]( /*strategy*/ NonEmptyList.of(LoadStateTopic1, LoadStateTopic2))
+//          .runWith(Sink.ignore)
+//          .futureValue shouldBe Done
+//        //        }
+//      }
+//    }
+
+  }
+
   trait TestContext extends AkkaSpecBase with EmbeddedKafka {
 
     implicit lazy val kafkaConfig =
@@ -393,7 +432,8 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     val LoadStateTopic1 = "load-state-topic-1"
     val LoadStateTopic2 = "load-state-topic-2"
 
-    val loadStrategy = Table("strategy", LoadAll, LoadCommitted)
+    val loadStrategy                                      = Table("strategy", LoadAll, LoadCommitted)
+    implicit val stringDeserializer: Deserializer[String] = new StringDeserializer
 
     def testTopicLoader[T](strategy: LoadTopicStrategy,
                            topics: NonEmptyList[String],
@@ -407,7 +447,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     def loadPartitions(strategy: LoadTopicStrategy,
                        partitions: NonEmptyList[TopicPartition],
                        f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)): Future[Done] =
-      TopicLoader.fromPartitions(strategy, partitions, f, new StringDeserializer).runWith(Sink.ignore)
+      TopicLoader.fromPartitions(strategy, partitions, f, stringDeserializer).runWith(Sink.ignore)
 
     def createCustomTopics(topics: List[String], partitions: Int) =
       topics.foreach(createCustomTopic(_, partitions = partitions))
