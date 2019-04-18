@@ -103,7 +103,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
       }
     }
 
-    "MOVED complete successfully if the topic is empty" in new TestContext {
+    "complete successfully if the topic is empty" in new TestContext {
       withRunningKafka {
         createCustomTopic(LoadStateTopic1, partitions = 10)
 
@@ -340,46 +340,6 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
     }
   }
 
-  "loadingSource" should {
-
-//    "fail if Kafka is unavailable at startup" in new TestContext {
-//      override implicit lazy val system: ActorSystem = ActorSystem(
-//        "test-actor-system",
-//        ConfigFactory.parseString(
-//          """
-//            |akka.kafka.consumer.kafka-clients {
-//            |  bootstrap.servers = "localhost:6001"
-//            |  request.timeout.ms = 700
-//            |  fetch.max.wait.ms = 500
-//            |  session.timeout.ms = 500
-//            |  heartbeat.interval.ms = 300
-//            |}
-//          """.stripMargin
-//        )
-//      )
-//
-//      TopicLoader
-//        .loadingSource[String]( /*LoadAll, */ NonEmptyList.one(LoadStateTopic1))
-//        .runWith(Sink.ignore)
-//        .failed
-//        .futureValue shouldBe a[TimeoutException]
-//    }
-
-    "complete successfully if the topic is empty" in new TestContext {
-      withRunningKafka {
-        createCustomTopic(LoadStateTopic1, partitions = 10)
-
-        forEvery(loadStrategy) { strategy =>
-          TopicLoader
-            .loadingSource[String](NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), strategy)
-            .runWith(Sink.ignore)
-            .futureValue shouldBe Done
-        }
-      }
-    }
-
-  }
-
   trait TestContext extends AkkaSpecBase with EmbeddedKafka {
 
     implicit lazy val kafkaConfig =
@@ -395,7 +355,7 @@ class TopicLoaderIntSpec extends WordSpecBase with Eventually {
            |  parallelism = 5
            |}
            |akka {
-           |  loglevel = "INFO"
+           |  loglevel = "OFF"
            |  kafka {
            |    consumer {
            |      max-wakeups = 2
