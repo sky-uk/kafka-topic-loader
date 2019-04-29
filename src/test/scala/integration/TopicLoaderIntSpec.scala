@@ -10,7 +10,7 @@ import akka.stream.scaladsl.Sink
 import akka.testkit.{TestActor, TestProbe}
 import akka.pattern.ask
 import akka.util.Timeout
-import base.{AkkaSpecBase, WordSpecBase}
+import base.{AkkaSpecBase, IntegrationSpecBase, WordSpecBase}
 import cats.data.NonEmptyList
 import cats.syntax.option._
 import cats.syntax.functor._
@@ -39,484 +39,280 @@ import cats.implicits.catsStdInstancesForList
 
 import scala.collection.mutable.MutableList
 
-class TopicLoaderIntSpec extends WordSpecBase with Eventually {
-
-  override implicit val patienceConfig = PatienceConfig(20.seconds, 200.millis)
-
-  implicit val timeout = Timeout(5 seconds)
-
-  "TopicLoader" should {
-
-    "update store records with entire state of provided topics using full log strategy" in new TestContext
-    with CountingRecordStore {
-      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-
-      withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-
-        publishToKafka(LoadStateTopic1, recordsToPublish)
-        publishToKafka(LoadStateTopic2, recordsToPublish)
-
-        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded.get() shouldBe 30)
-      }
-    }
-
-    "update store records with state of provided topics using last consumer commit strategy" in new TestContext
-    with KafkaConsumer with CountingRecordStore {
-      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-
-      withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-
-        publishToKafka(LoadStateTopic1, recordsToPublish.take(11))
-        moveOffsetToEnd(LoadStateTopic1)
-        publishToKafka(LoadStateTopic1, recordsToPublish.takeRight(4))
-
-        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded.get() shouldBe 11)
-      }
-    }
-
-    "update store records when a topic is empty for the LoadAll strategy" in new TestContext with KafkaConsumer
-    with CountingRecordStore {
-      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-
-      withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-
-        publishToKafka(LoadStateTopic1, recordsToPublish)
-
-        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded.get() shouldBe 15)
-      }
-    }
-
-    "update store records when a topic is empty for the LoadCommitted strategy" in new TestContext with KafkaConsumer
-    with CountingRecordStore {
-      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-
-      withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-
-        publishToKafka(LoadStateTopic1, recordsToPublish)
-        moveOffsetToEnd(LoadStateTopic1)
-
-        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded.get() shouldBe 15)
-      }
-    }
-
-    "complete successfully if the topic is empty" in new TestContext {
-      withRunningKafka {
-        createCustomTopic(LoadStateTopic1, partitions = 10)
-
-        forEvery(loadStrategy) { strategy =>
-          loadTestTopic(strategy).futureValue shouldBe Done
-        }
-      }
-    }
-
-    "load data only from required partitions" in new TestContext with KafkaConsumer {
-      val partitionsToRead = NonEmptyList.of(1, 2)
-      val topicPartitions  = partitionsToRead.map(p => new TopicPartition(LoadStateTopic1, p))
-      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-
-      withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-        publishToKafka(LoadStateTopic1, recordsToPublish)
-        moveOffsetToEnd(LoadStateTopic1)
-
-        forEvery(loadStrategy) { strategy =>
-          val store = new RecordStore()
-
-          loadPartitions(strategy, topicPartitions, store.storeRecord).futureValue shouldBe Done
-
-          store.getRecords.futureValue.map(_.partition) should contain only (partitionsToRead.toList: _*)
-        }
-      }
-    }
-
-    "read always from LOG-BEGINNING-OFFSETS" in new TestContext with KafkaConsumer {
-      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-
-      forEvery(loadStrategy) { strategy =>
-        withRunningKafka {
-          createCustomTopic(LoadStateTopic1, partitions = 5)
-          publishToKafka(LoadStateTopic1, recordsToPublish)
-
-          val count = withAssignedConsumer(true, offsetReset = "earliest", LoadStateTopic1)(
-            consumeAllKafkaRecordsFromEarliestOffset(_).size)
-          count shouldBe recordsToPublish.size
-
-          loadTestTopic(strategy).futureValue shouldBe Done
-        }
-      }
-    }
-
-    "work when LOG-BEGINNING-OFFSETS is > 0 (e.g. has been reset)" in new TestContext with KafkaConsumer {
-      val initialRecords = records(1 to 10, message = "old")
-      val newRecords     = records(1 to 10, message = "new")
-      val endRecords     = records(11 to 20, message = "msg")
-
-      forEvery(loadStrategy) { strategy =>
-        val recordStore = new RecordStore()
-
-        withRunningKafka {
-          createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
-          publishToKafka(LoadStateTopic1, initialRecords)
-          publishToKafka(LoadStateTopic1, newRecords)
-
-          publishToKafka(LoadStateTopic1, endRecords)
-          moveOffsetToEnd(LoadStateTopic1)
-          waitForOverridingKafkaMessages(LoadStateTopic1, initialRecords, newRecords)
-
-          loadTestTopic(strategy, recordStore.storeRecord).futureValue shouldBe Done
-          recordStore.recordKeys.futureValue should contain theSameElementsAs (newRecords ++ endRecords).toMap.keys
-        }
-      }
-    }
-
-    "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
-    with KafkaConsumer {
-      val recordStore              = new RecordStore()
-      val initialRecordsToStay     = records(1 to 5, "init")
-      val initialRecordsToOverride = records(6 to 10, "will be overridden")
-      val overridingRecords        = records(6 to 10, "new")
-
-      withRunningKafka {
-        createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
-
-        publishToKafka(LoadStateTopic1, initialRecordsToStay ++ initialRecordsToOverride)
-        moveOffsetToEnd(LoadStateTopic1)
-
-        publishToKafka(LoadStateTopic1, overridingRecords)
-        publishToKafka(LoadStateTopic1, records(11 to 20, "new"))
-        waitForOverridingKafkaMessages(LoadStateTopic1, initialRecordsToOverride, overridingRecords)
-
-        loadTestTopic(LoadCommitted, recordStore.storeRecord).futureValue shouldBe Done
-
-        val recordKeys = recordStore.getRecords.map(_.map(_.key)).futureValue
-        recordKeys should contain theSameElementsAs initialRecordsToStay.map(_._1)
-      }
-    }
-
-    "throw if Kafka is unavailable at startup" in new TestContext {
-      override implicit lazy val system: ActorSystem = ActorSystem(
-        "test-actor-system",
-        ConfigFactory.parseString(
-          """
-          |akka.kafka.consumer.kafka-clients {
-          |  bootstrap.servers = "localhost:6001"
-          |  request.timeout.ms = 700
-          |  fetch.max.wait.ms = 500
-          |  session.timeout.ms = 500
-          |  heartbeat.interval.ms = 300
-          |}
-        """.stripMargin
-        )
-      )
-
-      loadTestTopic(LoadAll).failed.futureValue shouldBe a[TimeoutException]
-    }
-
-    "fail the source if Kafka goes down during processing" in new TestContext with DelayedProbe {
-
-      override implicit lazy val system: ActorSystem = ActorSystem(
-        "test-actor-system",
-        ConfigFactory.parseString(
-          s"""
-           |topic-loader {
-           |  idle-timeout = 1 second
-           |  buffer-size = 1
-           |  parallelism = 2
-           |}
-           |akka {
-           |  loglevel = "OFF"
-           |  log-config-on-start = off
-           |
-           |  kafka.consumer {
-           |    max-wakeups = 2
-           |    kafka-clients {
-           |      fetch.max.bytes = 1
-           |      bootstrap.servers = "localhost:${kafkaConfig.kafkaPort}"
-           |    }
-           |  }
-           |}
-      """.stripMargin
-        )
-      )
-
-      val slowProbe = delayedProbe(100.millis, Unit)
-
-      val result = withRunningKafka {
-        val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-
-        createCustomTopic(LoadStateTopic1, partitions = 12)
-        publishToKafka(LoadStateTopic1, recordsToPublish)
-
-        val callSlowProbe: ConsumerRecord[String, String] => Future[Int] = _ => (slowProbe.ref ? 123).map(_ => 0)
-
-        val res = loadTestTopic(LoadAll, callSlowProbe)
-
-        slowProbe.expectMsgType[Int](10.seconds)
-
-        res
-      }
-
-      result.failed.futureValue shouldBe a[java.util.concurrent.TimeoutException]
-    }
-
-    "fail when Kafka is too slow for client to start" in new TestContext {
-
-      override implicit lazy val system: ActorSystem =
-        ActorSystem(
-          "test-actor-system",
-          ConfigFactory.parseString(
-            s"""
-             |akka.kafka.consumer.kafka-clients {
-             |  bootstrap.servers = "localhost:${kafkaConfig.kafkaPort}"
-             |  request.timeout.ms = 3
-             |  session.timeout.ms = 2
-             |  fetch.max.wait.ms = 2
-             |  heartbeat.interval.ms = 1
-             |}
-        """.stripMargin
-          )
-        )
-
-      withRunningKafka {
-        createCustomTopic(LoadStateTopic1, partitions = 5)
-        loadTestTopic(LoadAll).failed.futureValue shouldBe a[TimeoutException]
-      }
-    }
-
-    "fail when store record is unsuccessful" in new TestContext {
-      val boom = new Exception("boom!")
-      val failingHandler: ConsumerRecord[String, String] => Future[Int] =
-        _ => Future.failed(boom)
-
-      withRunningKafka {
-        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-
-        publishToKafka(LoadStateTopic1, List(UUID.randomUUID().toString -> "1"))
-
-        loadTestTopic(LoadAll, failingHandler).failed.futureValue shouldBe boom
-      }
-    }
-
-    "emit last offsets consumed by topic loader" in new TestContext with KafkaConsumer {
-      val partitions       = 1 to 5 map (partitionNumber => new TopicPartition(LoadStateTopic1, partitionNumber - 1))
-      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-
-      withRunningKafka {
-        createCustomTopic(LoadStateTopic1, partitions = partitions.size)
-
-        publishToKafka(LoadStateTopic1, recordsToPublish)
-
-        withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
-          val highestOffsets = partitions.toList.fproduct(consumer.position).toMap
-          val loaded         = new MutableList[Boolean]
-
-          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1), _ => { loaded += false; Future.unit })
-            .map(offsets => { loaded += true; offsets })
-            .runWith(Sink.seq)
-            .futureValue should contain theSameElementsAs Seq(highestOffsets)
-
-          loaded.last shouldBe true
-        }
-      }
-    }
-
-    "emit highest offsets even when not consumed anything" in new TestContext with KafkaConsumer {
-      val partitions = 1 to 5 map (partitionNumber => new TopicPartition(LoadStateTopic1, partitionNumber - 1))
-      withRunningKafka {
-        createCustomTopic(LoadStateTopic1, partitions = partitions.size)
-
-        withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
-          val highestOffsets = partitions.toList.fproduct(consumer.position).toMap
-
-          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1), _ => Future.unit)
-            .runWith(Sink.head)
-            .futureValue shouldBe highestOffsets
-        }
-      }
-    }
-  }
-
-  trait TestContext extends AkkaSpecBase with EmbeddedKafka {
-
-    implicit lazy val kafkaConfig =
-      EmbeddedKafkaConfig(kafkaPort = RandomPort(), zooKeeperPort = RandomPort(), Map("log.roll.ms" -> "10"))
-
-    override implicit lazy val system: ActorSystem = ActorSystem(
-      name = s"test-actor-system-${UUID.randomUUID().toString}",
-      config = ConfigFactory.parseString(
-        s"""
-           |topic-loader {
-           |  idle-timeout = 5 minutes
-           |  buffer-size = 1000
-           |  parallelism = 5
-           |}
-           |akka {
-           |  loglevel = "OFF"
-           |  kafka {
-           |    consumer {
-           |      max-wakeups = 2
-           |      wakeup-timeout = 2 seconds
-           |      kafka-clients {
-           |        ${CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG} = "localhost:${kafkaConfig.kafkaPort}"
-           |        ${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG} = "earliest"
-           |        // auto-commit should be set to *false* for at-least-once semantics.  By setting this to true, our tests
-           |        // can prove that our code overrides this value, so we can't accidentally & silently break at-least-once
-           |        // functionality with bad config
-           |        ${ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG} = true
-           |        group.id = test-consumer-group
-           |      }
-           |    }
-           |    producer.kafka-clients {
-           |      ${CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG} = "localhost:${kafkaConfig.kafkaPort}"
-           |      ${ProducerConfig.MAX_BLOCK_MS_CONFIG} = 3000
-           |    }
-           |  }
-           |}
-        """.stripMargin
-      )
-    )
-
-    val compactedTopicConfig = Map(
-      "cleanup.policy"            -> "compact",
-      "delete.retention.ms"       -> "0",
-      "min.insync.replicas"       -> "2",
-      "min.cleanable.dirty.ratio" -> "0.01",
-      "segment.ms"                -> "10"
-    )
-
-    def records(r: Range, message: String) = r.toList.map(_.toString -> message)
-
-    val LoadStateTopic1 = "load-state-topic-1"
-    val LoadStateTopic2 = "load-state-topic-2"
-
-    val loadStrategy                                      = Table("strategy", LoadAll, LoadCommitted)
-    implicit val stringDeserializer: Deserializer[String] = new StringDeserializer
-
-    def testTopicLoader[T](strategy: LoadTopicStrategy,
-                           topics: NonEmptyList[String],
-                           f: ConsumerRecord[String, String] => Future[T]) =
-      TopicLoader.fromTopics(strategy, topics, f, new StringDeserializer)
-
-    def loadTestTopic(strategy: LoadTopicStrategy,
-                      f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)): Future[Done] =
-      testTopicLoader(strategy, NonEmptyList.of(LoadStateTopic1, LoadStateTopic2), f).runWith(Sink.ignore)
-
-    def loadPartitions(strategy: LoadTopicStrategy,
-                       partitions: NonEmptyList[TopicPartition],
-                       f: ConsumerRecord[String, String] => Future[Int] = _ => Future.successful(0)): Future[Done] =
-      TopicLoader.fromPartitions(strategy, partitions, f, stringDeserializer).runWith(Sink.ignore)
-
-    def createCustomTopics(topics: List[String], partitions: Int) =
-      topics.foreach(createCustomTopic(_, partitions = partitions))
-  }
-
-  trait DelayedProbe { this: TestContext =>
-    def delayedProbe[T](delay: FiniteDuration, response: T) = {
-      val probe = TestProbe()
-      probe.setAutoPilot((sender: ActorRef, msg: Any) =>
-        msg match {
-          case _ =>
-            Thread.sleep(delay.toMillis)
-            sender ! response
-            TestActor.KeepRunning
-      })
-      probe
-    }
-  }
-
-  trait CountingRecordStore { this: TestContext =>
-    val numRecordsLoaded = new AtomicInteger()
-
-    val storeRecord: ConsumerRecord[String, String] => Future[Int] =
-      _ => Future.successful(numRecordsLoaded.incrementAndGet())
-  }
-
-  trait KafkaConsumer { this: TestContext =>
-
-    def moveOffsetToEnd(topic: String): Unit =
-      withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(0))
-
-    def waitForOverridingKafkaMessages(topic: String,
-                                       initialRecords: List[(String, String)],
-                                       newRecords: List[(String, String)]) =
-      consumeEventually(topic) { r =>
-        r should contain noElementsOf initialRecords
-        r should contain allElementsOf newRecords
-      }
-
-    def consumeEventually(topic: String, groupId: String = UUID.randomUUID().toString)(
-        f: List[(String, String)] => Assertion) =
-      eventually {
-        val records = withAssignedConsumer(autoCommit = false, offsetReset = "earliest", topic, groupId.some)(
-          consumeAllKafkaRecordsFromEarliestOffset(_, List.empty))
-
-        f(records.map(r => r.key -> r.value))
-      }
-
-    def withAssignedConsumer[T](autoCommit: Boolean,
-                                offsetReset: String,
-                                topic: String,
-                                groupId: Option[String] = None)(f: Consumer[String, String] => T): T = {
-      val consumer = createConsumer(autoCommit, offsetReset, groupId)
-      assignPartitions(consumer, topic)
-      try {
-        f(consumer)
-      } finally {
-        consumer.close()
-      }
-    }
-
-    def assignPartitions(consumer: Consumer[_, _], topic: String): Unit = {
-      val partitions = consumer.partitionsFor(topic).asScala.map(p => new TopicPartition(topic, p.partition))
-      consumer.assign(partitions.asJava)
-    }
-
-    @tailrec
-    final def consumeAllKafkaRecordsFromEarliestOffset(
-        consumer: Consumer[String, String],
-        polled: List[ConsumerRecord[String, String]] = List.empty): List[ConsumerRecord[String, String]] = {
-      val p = consumer.poll(500).iterator().asScala.toList
-      if (p.isEmpty) polled else consumeAllKafkaRecordsFromEarliestOffset(consumer, polled ++ p)
-    }
-
-    def createConsumer(autoCommit: Boolean, offsetReset: String, groupId: Option[String]): Consumer[String, String] = {
-
-      val baseSettings =
-        ConsumerSettings(system, new StringDeserializer, new StringDeserializer)
-          .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, autoCommit.toString)
-          .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, offsetReset)
-
-      val settings = groupId.fold(baseSettings)(baseSettings.withProperty(ConsumerConfig.GROUP_ID_CONFIG, _))
-      settings.createKafkaConsumer()
-    }
-  }
-
-  class RecordStore()(implicit system: ActorSystem) {
-    private val storeActor = system.actorOf(Props(classOf[Store], RecordStore.this))
-
-    def storeRecord(rec: ConsumerRecord[String, String])(implicit timeout: Timeout): Future[Int] =
-      (storeActor ? rec).mapTo[Int]
-
-    def recordKeys(implicit timeout: Timeout, ec: ExecutionContext) = getRecords.map(_.map(_.key))
-
-    def getRecords(implicit timeout: Timeout): Future[List[ConsumerRecord[String, String]]] =
-      (storeActor ? 'GET).mapTo[List[ConsumerRecord[String, String]]]
-
-    private class Store extends Actor {
-      override def receive: Receive = store(List.empty)
-
-      def store(records: List[ConsumerRecord[_, _]]): Receive = {
-        case r: ConsumerRecord[_, _] =>
-          val newRecs = records :+ r
-          sender() ! newRecs.size
-          context.become(store(newRecs))
-        case 'GET =>
-          sender() ! records
-      }
-    }
-  }
+class TopicLoaderIntSpec extends IntegrationSpecBase {
+
+//  "TopicLoader" should {
+//
+//    "update store records with entire state of provided topics using full log strategy" in new TestContext
+//    with CountingRecordStore {
+//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
+//
+//      withRunningKafka {
+//        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
+//
+//        publishToKafka(LoadStateTopic1, recordsToPublish)
+//        publishToKafka(LoadStateTopic2, recordsToPublish)
+//
+//        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded.get() shouldBe 30)
+//      }
+//    }
+//
+//    "update store records with state of provided topics using last consumer commit strategy" in new TestContext
+//    with KafkaConsumer with CountingRecordStore {
+//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
+//
+//      withRunningKafka {
+//        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
+//
+//        publishToKafka(LoadStateTopic1, recordsToPublish.take(11))
+//        moveOffsetToEnd(LoadStateTopic1)
+//        publishToKafka(LoadStateTopic1, recordsToPublish.takeRight(4))
+//
+//        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded.get() shouldBe 11)
+//      }
+//    }
+//
+//    "update store records when a topic is empty for the LoadAll strategy" in new TestContext with KafkaConsumer
+//    with CountingRecordStore {
+//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
+//
+//      withRunningKafka {
+//        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
+//
+//        publishToKafka(LoadStateTopic1, recordsToPublish)
+//
+//        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded.get() shouldBe 15)
+//      }
+//    }
+//
+//    "update store records when a topic is empty for the LoadCommitted strategy" in new TestContext with KafkaConsumer
+//    with CountingRecordStore {
+//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
+//
+//      withRunningKafka {
+//        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
+//
+//        publishToKafka(LoadStateTopic1, recordsToPublish)
+//        moveOffsetToEnd(LoadStateTopic1)
+//
+//        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded.get() shouldBe 15)
+//      }
+//    }
+//
+//    "complete successfully if the topic is empty" in new TestContext {
+//      withRunningKafka {
+//        createCustomTopic(LoadStateTopic1, partitions = 10)
+//
+//        forEvery(loadStrategy) { strategy =>
+//          loadTestTopic(strategy).futureValue shouldBe Done
+//        }
+//      }
+//    }
+//
+//    "read always from LOG-BEGINNING-OFFSETS" in new TestContext with KafkaConsumer {
+//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
+//
+//      forEvery(loadStrategy) { strategy =>
+//        withRunningKafka {
+//          createCustomTopic(LoadStateTopic1, partitions = 5)
+//          publishToKafka(LoadStateTopic1, recordsToPublish)
+//
+//          val count = withAssignedConsumer(true, offsetReset = "earliest", LoadStateTopic1)(
+//            consumeAllKafkaRecordsFromEarliestOffset(_).size)
+//          count shouldBe recordsToPublish.size
+//
+//          loadTestTopic(strategy).futureValue shouldBe Done
+//        }
+//      }
+//    }
+//
+//    "work when LOG-BEGINNING-OFFSETS is > 0 (e.g. has been reset)" in new TestContext with KafkaConsumer {
+//      val initialRecords = records(1 to 10, message = "old")
+//      val newRecords     = records(1 to 10, message = "new")
+//      val endRecords     = records(11 to 20, message = "msg")
+//
+//      forEvery(loadStrategy) { strategy =>
+//        val recordStore = new RecordStore()
+//
+//        withRunningKafka {
+//          createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
+//          publishToKafka(LoadStateTopic1, initialRecords)
+//          publishToKafka(LoadStateTopic1, newRecords)
+//
+//          publishToKafka(LoadStateTopic1, endRecords)
+//          moveOffsetToEnd(LoadStateTopic1)
+//          waitForOverridingKafkaMessages(LoadStateTopic1, initialRecords, newRecords)
+//
+//          loadTestTopic(strategy, recordStore.storeRecord).futureValue shouldBe Done
+//          recordStore.recordKeys.futureValue should contain theSameElementsAs (newRecords ++ endRecords).toMap.keys
+//        }
+//      }
+//    }
+//
+//    "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
+//    with KafkaConsumer {
+//      val recordStore              = new RecordStore()
+//      val initialRecordsToStay     = records(1 to 5, "init")
+//      val initialRecordsToOverride = records(6 to 10, "will be overridden")
+//      val overridingRecords        = records(6 to 10, "new")
+//
+//      withRunningKafka {
+//        createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
+//
+//        publishToKafka(LoadStateTopic1, initialRecordsToStay ++ initialRecordsToOverride)
+//        moveOffsetToEnd(LoadStateTopic1)
+//
+//        publishToKafka(LoadStateTopic1, overridingRecords)
+//        publishToKafka(LoadStateTopic1, records(11 to 20, "new"))
+//        waitForOverridingKafkaMessages(LoadStateTopic1, initialRecordsToOverride, overridingRecords)
+//
+//        loadTestTopic(LoadCommitted, recordStore.storeRecord).futureValue shouldBe Done
+//
+//        val recordKeys = recordStore.getRecords.map(_.map(_.key)).futureValue
+//        recordKeys should contain theSameElementsAs initialRecordsToStay.map(_._1)
+//      }
+//    }
+//
+//    "throw if Kafka is unavailable at startup" in new TestContext {
+//      override implicit lazy val system: ActorSystem = ActorSystem(
+//        "test-actor-system",
+//        ConfigFactory.parseString(
+//          """
+//          |akka.kafka.consumer.kafka-clients {
+//          |  bootstrap.servers = "localhost:6001"
+//          |  request.timeout.ms = 700
+//          |  fetch.max.wait.ms = 500
+//          |  session.timeout.ms = 500
+//          |  heartbeat.interval.ms = 300
+//          |}
+//        """.stripMargin
+//        )
+//      )
+//
+//      loadTestTopic(LoadAll).failed.futureValue shouldBe a[TimeoutException]
+//    }
+//
+//    "fail the source if Kafka goes down during processing" in new TestContext with DelayedProbe {
+//
+//      override implicit lazy val system: ActorSystem = ActorSystem(
+//        "test-actor-system",
+//        ConfigFactory.parseString(
+//          s"""
+//           |topic-loader {
+//           |  idle-timeout = 1 second
+//           |  buffer-size = 1
+//           |  parallelism = 2
+//           |}
+//           |akka {
+//           |  loglevel = "OFF"
+//           |  log-config-on-start = off
+//           |
+//           |  kafka.consumer {
+//           |    max-wakeups = 2
+//           |    kafka-clients {
+//           |      fetch.max.bytes = 1
+//           |      bootstrap.servers = "localhost:${kafkaConfig.kafkaPort}"
+//           |    }
+//           |  }
+//           |}
+//      """.stripMargin
+//        )
+//      )
+//
+//      val slowProbe = delayedProbe(100.millis, Unit)
+//
+//      val result = withRunningKafka {
+//        val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
+//
+//        createCustomTopic(LoadStateTopic1, partitions = 12)
+//        publishToKafka(LoadStateTopic1, recordsToPublish)
+//
+//        val callSlowProbe: ConsumerRecord[String, String] => Future[Int] = _ => (slowProbe.ref ? 123).map(_ => 0)
+//
+//        val res = loadTestTopic(LoadAll, callSlowProbe)
+//
+//        slowProbe.expectMsgType[Int](10.seconds)
+//
+//        res
+//      }
+//
+//      result.failed.futureValue shouldBe a[java.util.concurrent.TimeoutException]
+//    }
+//
+//    "fail when Kafka is too slow for client to start" in new TestContext {
+//
+//      override implicit lazy val system: ActorSystem =
+//        ActorSystem(
+//          "test-actor-system",
+//          ConfigFactory.parseString(
+//            s"""
+//             |akka.kafka.consumer.kafka-clients {
+//             |  bootstrap.servers = "localhost:${kafkaConfig.kafkaPort}"
+//             |  request.timeout.ms = 3
+//             |  session.timeout.ms = 2
+//             |  fetch.max.wait.ms = 2
+//             |  heartbeat.interval.ms = 1
+//             |}
+//        """.stripMargin
+//          )
+//        )
+//
+//      withRunningKafka {
+//        createCustomTopic(LoadStateTopic1, partitions = 5)
+//        loadTestTopic(LoadAll).failed.futureValue shouldBe a[TimeoutException]
+//      }
+//    }
+//
+//    "fail when store record is unsuccessful" in new TestContext {
+//      val boom = new Exception("boom!")
+//      val failingHandler: ConsumerRecord[String, String] => Future[Int] =
+//        _ => Future.failed(boom)
+//
+//      withRunningKafka {
+//        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
+//
+//        publishToKafka(LoadStateTopic1, List(UUID.randomUUID().toString -> "1"))
+//
+//        loadTestTopic(LoadAll, failingHandler).failed.futureValue shouldBe boom
+//      }
+//    }
+//
+//    "emit last offsets consumed by topic loader" in new TestContext with KafkaConsumer {
+//      val partitions       = 1 to 5 map (partitionNumber => new TopicPartition(LoadStateTopic1, partitionNumber - 1))
+//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
+//
+//      withRunningKafka {
+//        createCustomTopic(LoadStateTopic1, partitions = partitions.size)
+//
+//        publishToKafka(LoadStateTopic1, recordsToPublish)
+//
+//        withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
+//          val highestOffsets = partitions.toList.fproduct(consumer.position).toMap
+//          val loaded         = new MutableList[Boolean]
+//
+//          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1), _ => { loaded += false; Future.unit })
+//            .map(offsets => { loaded += true; offsets })
+//            .runWith(Sink.seq)
+//            .futureValue should contain theSameElementsAs Seq(highestOffsets)
+//
+//          loaded.last shouldBe true
+//        }
+//      }
+//    }
+//
+//    "emit highest offsets even when not consumed anything" in new TestContext with KafkaConsumer {
+//      val partitions = 1 to 5 map (partitionNumber => new TopicPartition(LoadStateTopic1, partitionNumber - 1))
+//      withRunningKafka {
+//        createCustomTopic(LoadStateTopic1, partitions = partitions.size)
+//
+//        withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
+//          val highestOffsets = partitions.toList.fproduct(consumer.position).toMap
+//
+//          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1), _ => Future.unit)
+//            .runWith(Sink.head)
+//            .futureValue shouldBe highestOffsets
+//        }
+//      }
+//    }
+//  }
 }

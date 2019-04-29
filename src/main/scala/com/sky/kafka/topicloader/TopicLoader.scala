@@ -3,7 +3,7 @@ package com.sky.kafka.topicloader
 import java.lang.{Long => JLong}
 import java.util.{List => JList, Map => JMap}
 
-import akka.NotUsed
+import akka.{Done, NotUsed}
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
@@ -25,43 +25,64 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-object TopicLoader extends LazyLogging {
+object TopicLoader extends TopicLoader with DeprecatedMethods
+
+trait TopicLoader {
+
+  /**
+    * Source that loads the specified topics from the beginning and completes
+    * when the offsets reach the point specified by the requested strategy.
+    */
+  def load[T : Deserializer](
+      topics: NonEmptyList[String],
+      strategy: LoadTopicStrategy
+  )(implicit system: ActorSystem): Source[T, Consumer.Control] = ???
+
+  /**
+    * Source that loads the specified topics from the beginning. When
+    * the latest current offests are reached, the materialised value is
+    * completed, and the stream continues.
+    */
+  def loadAndRun[T : Deserializer](
+      topics: NonEmptyList[String],
+  )(implicit system: ActorSystem): Source[T, (Future[Done], Consumer.Control)] = ???
+
+  /**
+    * Same as [[TopicLoader.loadAndRun]], but with one stream per partition.
+    * See [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for an
+    * explanation of how the outer Source works.
+    */
+  def partitionedLoadAndRun[T : Deserializer](
+      topics: NonEmptyList[String],
+  )(implicit system: ActorSystem): Source[(TopicPartition, Source[T, Future[Done]]), Consumer.Control] = ???
+
+}
+
+trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
 
   type PartitionOffsets = Map[TopicPartition, Long]
 
   /**
     * Consumes the records from the provided topics, passing them through `onRecord`.
-    *
-    * @param strategy
-    * All records on a topic can be consumed using the `LoadAll` strategy.
-    * All records up to the last committed offset of the configured `group.id` (provided in your application.conf)
-    * can be consumed using the `LoadCommitted` strategy.
-    *
     */
+  @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.2.8")
   def fromTopics[T](
       strategy: LoadTopicStrategy,
       topics: NonEmptyList[String],
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[PartitionOffsets, NotUsed] = {
-
     val partitionsFromTopics: Consumer[String, _] => List[TopicPartition] = c =>
       for {
         t <- topics.toList
         p <- c.partitionsFor(t).asScala
       } yield new TopicPartition(t, p.partition)
-
     TopicLoader(strategy, partitionsFromTopics, onRecord, valueDeserializer)
   }
 
   /**
     * Consumes the records from the provided partitions, passing them through `onRecord`.
-    *
-    * @param strategy
-    * All records on a partition can be consumed using the `LoadAll` strategy.
-    * All records up to the last committed offset of the configured `group.id` (provided in your application.conf)
-    * can be consumed using the `LoadCommitted` strategy.
-    *
     */
+  @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.2.8")
   def fromPartitions[T](
       strategy: LoadTopicStrategy,
       partitions: NonEmptyList[TopicPartition],
@@ -69,11 +90,11 @@ object TopicLoader extends LazyLogging {
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[PartitionOffsets, NotUsed] =
     TopicLoader(strategy, _ => partitions.toList, onRecord, valueDeserializer)
 
-  private def apply[T](
-      strategy: LoadTopicStrategy,
-      requiredPartitions: Consumer[String, _] => List[TopicPartition],
-      onRecord: ConsumerRecord[String, T] => Future[_],
-      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[PartitionOffsets, NotUsed] = {
+  @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.2.8")
+  def apply[T](strategy: LoadTopicStrategy,
+               requiredPartitions: Consumer[String, _] => List[TopicPartition],
+               onRecord: ConsumerRecord[String, T] => Future[_],
+               valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[PartitionOffsets, NotUsed] = {
 
     import system.dispatcher
 
