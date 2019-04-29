@@ -14,7 +14,7 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.serialization.{Deserializer, StringDeserializer}
+import org.apache.kafka.common.serialization.{Deserializer, IntegerDeserializer, StringDeserializer}
 import org.scalatest.Assertion
 import org.scalatest.concurrent.Eventually
 import org.scalatest.prop.Tables.Table
@@ -78,7 +78,9 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
       "segment.ms"                -> "10"
     )
 
-    def records(r: Range, message: String) = r.toList.map(_.toString -> message)
+    def records(r: Range) = r.toList.map(i => s"k$i" -> s"v$i")
+
+    def recordToTuple[K, V](record: ConsumerRecord[K, V]): (K, V) = (record.key(), record.value())
 
     val LoadStateTopic1 = "load-state-topic-1"
     val LoadStateTopic2 = "load-state-topic-2"

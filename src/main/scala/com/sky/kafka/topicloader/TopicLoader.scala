@@ -33,29 +33,29 @@ trait TopicLoader {
     * Source that loads the specified topics from the beginning and completes
     * when the offsets reach the point specified by the requested strategy.
     */
-  def load[T : Deserializer](
+  def load[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
       strategy: LoadTopicStrategy
-  )(implicit system: ActorSystem): Source[T, Consumer.Control] = ???
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Consumer.Control] = ???
 
   /**
     * Source that loads the specified topics from the beginning. When
     * the latest current offests are reached, the materialised value is
     * completed, and the stream continues.
     */
-  def loadAndRun[T : Deserializer](
+  def loadAndRun[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
-  )(implicit system: ActorSystem): Source[T, (Future[Done], Consumer.Control)] = ???
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Consumer.Control)] = ???
 
   /**
     * Same as [[TopicLoader.loadAndRun]], but with one stream per partition.
     * See [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for an
     * explanation of how the outer Source works.
     */
-  def partitionedLoadAndRun[T : Deserializer](
+  def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
-  )(implicit system: ActorSystem): Source[(TopicPartition, Source[T, Future[Done]]), Consumer.Control] = ???
-
+  )(implicit system: ActorSystem): Source[(TopicPartition, Source[ConsumerRecord[K, V], Future[Done]]),
+                                          Consumer.Control] = ???
 }
 
 trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
@@ -77,7 +77,19 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
         p <- c.partitionsFor(t).asScala
       } yield new TopicPartition(t, p.partition)
     TopicLoader(strategy, partitionsFromTopics, onRecord, valueDeserializer)
+
+//    val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
+//    import system.dispatcher
+//
+//    load[String, T](topics, strategy)(keySerializer, valueDeserializer, system)
+//      .mapMaterializedValue(_ => NotUsed)
+//      .mapAsync(config.parallelism.value)(r => onRecord(r).map(_ => r))
+//      .fold(Map.empty[TopicPartition, Long]) { case (po, r) =>
+//        po + (new TopicPartition(r.topic, r.partition) -> r.offset)
+//      }
   }
+
+  private lazy val keySerializer = new StringDeserializer
 
   /**
     * Consumes the records from the provided partitions, passing them through `onRecord`.
@@ -137,7 +149,7 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
             .via(filterBelowHighestOffset)
             .mapAsync(config.parallelism.value)(handleRecord)
             .fold(offsets) { case (offset, _) => offset }
-            .mapMaterializedValue(logResult(_, offsets.keys))
+            .mapMaterializedValue((_, offsets.keys))
       }
     }
 
@@ -223,7 +235,7 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
     def unapply[T](h: HighestOffsetsWithRecord[T]): Option[ConsumerRecord[String, T]] = h.consumerRecord
   }
 
-  private implicit val showLogOffsets: Show[LogOffsets] = o =>
+  private implicit val showLogOffsets: logResultShow[LogOffsets] = o =>
     s"LogOffsets(lowest = ${o.lowest}, highest = ${o.highest})"
 
   private implicit val showTopicPartitions: Show[Iterable[TopicPartition]] =

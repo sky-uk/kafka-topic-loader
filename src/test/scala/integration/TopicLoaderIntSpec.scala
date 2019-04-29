@@ -41,6 +41,18 @@ import scala.collection.mutable.MutableList
 
 class TopicLoaderIntSpec extends IntegrationSpecBase {
 
+  "load" should {
+    "stream all records from provided topics using LoadAll strategy" in new TestContext {
+      val topics           = NonEmptyList.of(LoadStateTopic1, LoadStateTopic2)
+      val recordsToPublish = records(1 to 15)
+
+      withRunningKafka {
+        val records = TopicLoader.load[String, String](topics, LoadAll).runWith(Sink.seq).futureValue
+        records.map(recordToTuple) should contain theSameElementsAs recordsToPublish
+      }
+    }
+  }
+
 //  "TopicLoader" should {
 //
 //    "update store records with entire state of provided topics using full log strategy" in new TestContext

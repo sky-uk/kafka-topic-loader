@@ -25,9 +25,9 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
   "fromTopics" should {
     "execute onRecord for all messages in provided topics" in new TestContext {
       val store                          = new RecordStore()
-      val (recordsTopic1, recordsTopic2) = records(1 to 30, UUID.randomUUID().toString).splitAt(15)
+      val (recordsTopic1, recordsTopic2) = records(1 to 30).splitAt(15)
       val topics                         = NonEmptyList.of(LoadStateTopic1, LoadStateTopic2)
-      val loadingStream                  = TopicLoader.fromTopics(LoadAll, topics, store.storeRecord, new StringDeserializer)
+      val loadingStream                  = TopicLoader.fromTopics(LoadAll, topics, store.storeRecord, stringDeserializer)
 
       withRunningKafka {
         createCustomTopics(topics, partitions = 5)
@@ -36,7 +36,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
 
         loadingStream.runWith(Sink.ignore).futureValue shouldBe Done
 
-        val processedRecords = store.getRecords.futureValue.map(r => (r.key(), r.value()))
+        val processedRecords = store.getRecords.futureValue.map(recordToTuple)
         processedRecords should contain theSameElementsAs (recordsTopic1 ++ recordsTopic2)
       }
     }
@@ -44,7 +44,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
 
   "fromPartitions" should {
     "load data only from required partitions" in new TestContext with KafkaConsumer {
-      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
+      val recordsToPublish = records(1 to 15)
       val partitionsToRead = NonEmptyList.of(1, 2)
       val topicPartitions  = partitionsToRead.map(p => new TopicPartition(LoadStateTopic1, p))
 
@@ -56,7 +56,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
         forEvery(loadStrategy) { strategy =>
           val store = new RecordStore()
           val loadingStream =
-            TopicLoader.fromPartitions(strategy, topicPartitions, store.storeRecord, new StringDeserializer)
+            TopicLoader.fromPartitions(strategy, topicPartitions, store.storeRecord, stringDeserializer)
 
           loadingStream.runWith(Sink.ignore).futureValue shouldBe Done
 
