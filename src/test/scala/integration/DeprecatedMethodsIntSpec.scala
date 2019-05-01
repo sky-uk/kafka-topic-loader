@@ -26,13 +26,13 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
     "execute onRecord for all messages in provided topics" in new TestContext {
       val store                          = new RecordStore()
       val (recordsTopic1, recordsTopic2) = records(1 to 30).splitAt(15)
-      val topics                         = NonEmptyList.of(LoadStateTopic1, LoadStateTopic2)
+      val topics                         = NonEmptyList.of(testTopic1, testTopic2)
       val loadingStream                  = TopicLoader.fromTopics(LoadAll, topics, store.storeRecord, stringDeserializer)
 
       withRunningKafka {
         createCustomTopics(topics, partitions = 5)
-        publishToKafka(LoadStateTopic1, recordsTopic1)
-        publishToKafka(LoadStateTopic2, recordsTopic2)
+        publishToKafka(testTopic1, recordsTopic1)
+        publishToKafka(testTopic2, recordsTopic2)
 
         loadingStream.runWith(Sink.ignore).futureValue shouldBe Done
 
@@ -46,12 +46,12 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
     "load data only from required partitions" in new TestContext with KafkaConsumer {
       val recordsToPublish = records(1 to 15)
       val partitionsToRead = NonEmptyList.of(1, 2)
-      val topicPartitions  = partitionsToRead.map(p => new TopicPartition(LoadStateTopic1, p))
+      val topicPartitions  = partitionsToRead.map(p => new TopicPartition(testTopic1, p))
 
       withRunningKafka {
-        createCustomTopics(NonEmptyList.one(LoadStateTopic1), partitions = 5)
-        publishToKafka(LoadStateTopic1, recordsToPublish)
-        moveOffsetToEnd(LoadStateTopic1)
+        createCustomTopics(NonEmptyList.one(testTopic1), partitions = 5)
+        publishToKafka(testTopic1, recordsToPublish)
+        moveOffsetToEnd(testTopic1)
 
         forEvery(loadStrategy) { strategy =>
           val store = new RecordStore()

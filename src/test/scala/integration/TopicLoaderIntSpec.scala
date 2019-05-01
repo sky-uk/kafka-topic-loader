@@ -41,76 +41,82 @@ import scala.collection.mutable.MutableList
 
 class TopicLoaderIntSpec extends IntegrationSpecBase {
 
-  "load" should {
-    "stream all records from provided topics using LoadAll strategy" in new TestContext {
-      val topics           = NonEmptyList.of(LoadStateTopic1, LoadStateTopic2)
-      val recordsToPublish = records(1 to 15)
+  "load" when {
 
-      withRunningKafka {
-        val records = TopicLoader.load[String, String](topics, LoadAll).runWith(Sink.seq).futureValue
-        records.map(recordToTuple) should contain theSameElementsAs recordsToPublish
+    "using LoadAll stragegy" should {
+
+      val strategy = LoadAll
+
+      "stream all records from all topics" in new TestContext {
+        val topics                 = NonEmptyList.of(testTopic1, testTopic2)
+        val (forTopic1, forTopic2) = records(1 to 15).splitAt(10)
+
+        withRunningKafka {
+          createCustomTopics(topics, partitions = 5)
+
+          publishToKafka(testTopic1, forTopic1)
+          publishToKafka(testTopic2, forTopic2)
+
+          val loadedRecords = TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue
+          loadedRecords.map(recordToTuple) should contain theSameElementsAs (forTopic1 ++ forTopic2)
+        }
+      }
+
+      "stream available records even when one topic is empty" in new TestContext {
+        val topics    = NonEmptyList.of(testTopic1, testTopic2)
+        val published = records(1 to 15)
+
+        withRunningKafka {
+          createCustomTopics(topics, partitions = 5)
+
+          publishToKafka(testTopic1, published)
+
+          val loadedRecords = TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue
+          loadedRecords.map(recordToTuple) should contain theSameElementsAs published
+        }
+      }
+    }
+
+    "using LoadCommitted stragegy" should {
+
+      val strategy = LoadCommitted
+
+      "stream all records up to the committed offset with LoadCommitted strategy" in new TestContext
+      with KafkaConsumer {
+        val topics                    = NonEmptyList.one(testTopic1)
+        val (committed, notCommitted) = records(1 to 15).splitAt(10)
+
+        withRunningKafka {
+          createCustomTopics(topics, partitions = 5)
+
+          publishToKafka(testTopic1, committed)
+          moveOffsetToEnd(testTopic1)
+          publishToKafka(testTopic1, notCommitted)
+
+          val loaded = TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue
+          loaded.map(recordToTuple) should contain theSameElementsAs committed
+        }
+      }
+
+      "stream available records even when one topic is empty" in new TestContext with KafkaConsumer {
+        val topics    = NonEmptyList.of(testTopic1, testTopic2)
+        val published = records(1 to 15)
+
+        withRunningKafka {
+          createCustomTopics(topics, partitions = 5)
+
+          publishToKafka(testTopic1, published)
+          moveOffsetToEnd(testTopic1)
+
+          val loadedRecords = TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue
+          loadedRecords.map(recordToTuple) should contain theSameElementsAs published
+        }
       }
     }
   }
 
 //  "TopicLoader" should {
-//
-//    "update store records with entire state of provided topics using full log strategy" in new TestContext
-//    with CountingRecordStore {
-//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-//
-//      withRunningKafka {
-//        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-//
-//        publishToKafka(LoadStateTopic1, recordsToPublish)
-//        publishToKafka(LoadStateTopic2, recordsToPublish)
-//
-//        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded.get() shouldBe 30)
-//      }
-//    }
-//
-//    "update store records with state of provided topics using last consumer commit strategy" in new TestContext
-//    with KafkaConsumer with CountingRecordStore {
-//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-//
-//      withRunningKafka {
-//        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-//
-//        publishToKafka(LoadStateTopic1, recordsToPublish.take(11))
-//        moveOffsetToEnd(LoadStateTopic1)
-//        publishToKafka(LoadStateTopic1, recordsToPublish.takeRight(4))
-//
-//        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded.get() shouldBe 11)
-//      }
-//    }
-//
-//    "update store records when a topic is empty for the LoadAll strategy" in new TestContext with KafkaConsumer
-//    with CountingRecordStore {
-//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-//
-//      withRunningKafka {
-//        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-//
-//        publishToKafka(LoadStateTopic1, recordsToPublish)
-//
-//        whenReady(loadTestTopic(LoadAll, storeRecord))(_ => numRecordsLoaded.get() shouldBe 15)
-//      }
-//    }
-//
-//    "update store records when a topic is empty for the LoadCommitted strategy" in new TestContext with KafkaConsumer
-//    with CountingRecordStore {
-//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-//
-//      withRunningKafka {
-//        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-//
-//        publishToKafka(LoadStateTopic1, recordsToPublish)
-//        moveOffsetToEnd(LoadStateTopic1)
-//
-//        whenReady(loadTestTopic(LoadCommitted, storeRecord))(_ => numRecordsLoaded.get() shouldBe 15)
-//      }
-//    }
-//
+
 //    "complete successfully if the topic is empty" in new TestContext {
 //      withRunningKafka {
 //        createCustomTopic(LoadStateTopic1, partitions = 10)

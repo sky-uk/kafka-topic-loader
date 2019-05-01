@@ -82,8 +82,9 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
     def recordToTuple[K, V](record: ConsumerRecord[K, V]): (K, V) = (record.key(), record.value())
 
-    val LoadStateTopic1 = "load-state-topic-1"
-    val LoadStateTopic2 = "load-state-topic-2"
+    val testTopic1          = "load-state-topic-1"
+    val testTopic2          = "load-state-topic-2"
+    val testTopicPartitions = 5
 
     val loadStrategy                                      = Table("strategy", LoadAll, LoadCommitted)
     implicit val stringDeserializer: Deserializer[String] = new StringDeserializer

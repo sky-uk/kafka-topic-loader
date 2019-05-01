@@ -149,7 +149,7 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
             .via(filterBelowHighestOffset)
             .mapAsync(config.parallelism.value)(handleRecord)
             .fold(offsets) { case (offset, _) => offset }
-            .mapMaterializedValue((_, offsets.keys))
+            .mapMaterializedValue(logResult(_, offsets.keys))
       }
     }
 
@@ -235,7 +235,7 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
     def unapply[T](h: HighestOffsetsWithRecord[T]): Option[ConsumerRecord[String, T]] = h.consumerRecord
   }
 
-  private implicit val showLogOffsets: logResultShow[LogOffsets] = o =>
+  private implicit val showLogOffsets: Show[LogOffsets] = o =>
     s"LogOffsets(lowest = ${o.lowest}, highest = ${o.highest})"
 
   private implicit val showTopicPartitions: Show[Iterable[TopicPartition]] =
