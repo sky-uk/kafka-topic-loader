@@ -43,7 +43,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
   "load" when {
 
-    "using LoadAll stragegy" should {
+    "using LoadAll strategy" should {
 
       val strategy = LoadAll
 
@@ -52,7 +52,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         val (forTopic1, forTopic2) = records(1 to 15).splitAt(10)
 
         withRunningKafka {
-          createCustomTopics(topics, partitions = 5)
+          createCustomTopics(topics)
 
           publishToKafka(testTopic1, forTopic1)
           publishToKafka(testTopic2, forTopic2)
@@ -67,7 +67,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         val published = records(1 to 15)
 
         withRunningKafka {
-          createCustomTopics(topics, partitions = 5)
+          createCustomTopics(topics)
 
           publishToKafka(testTopic1, published)
 
@@ -77,7 +77,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       }
     }
 
-    "using LoadCommitted stragegy" should {
+    "using LoadCommitted strategy" should {
 
       val strategy = LoadCommitted
 
@@ -87,7 +87,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         val (committed, notCommitted) = records(1 to 15).splitAt(10)
 
         withRunningKafka {
-          createCustomTopics(topics, partitions = 5)
+          createCustomTopics(topics)
 
           publishToKafka(testTopic1, committed)
           moveOffsetToEnd(testTopic1)
@@ -103,7 +103,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         val published = records(1 to 15)
 
         withRunningKafka {
-          createCustomTopics(topics, partitions = 5)
+          createCustomTopics(topics)
 
           publishToKafka(testTopic1, published)
           moveOffsetToEnd(testTopic1)
@@ -113,59 +113,66 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         }
       }
     }
+
+    "using any strategy" should {
+
+      val loadStrategy = Table("strategy", LoadAll, LoadCommitted)
+
+      "complete successfully if the topic is empty" in new TestContext {
+        val topics = NonEmptyList.one(testTopic1)
+
+        withRunningKafka {
+          createCustomTopics(topics)
+
+          forEvery(loadStrategy) { strategy =>
+            TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue shouldBe empty
+          }
+        }
+      }
+
+      "read partitions that have been compacted" in new TestContext with KafkaConsumer {
+        val published        = records(1 to 10)
+        val publishedUpdated = published.map { case (k, v) => (k, v.reverse) }
+
+        forEvery(loadStrategy) { strategy =>
+          withRunningKafka {
+            createCustomTopic(testTopic1, aggressiveCompactionConfig)
+
+            publishToKafka(testTopic1, published ++ publishedUpdated)
+            val otherMessages = publishMessagesToTriggerCompaction(testTopic1)
+
+            moveOffsetToEnd(testTopic1) // FIXME: 2ND ITERATION OF TABLE ALWAYS FAILS WITHOUT THIS
+            waitForCompaction(testTopic1, deletedByCompaction = published, remainingAfterCompaction = publishedUpdated)
+
+            val loadedRecords =
+              TopicLoader.load[String, String](NonEmptyList.one(testTopic1), strategy).runWith(Sink.seq).futureValue
+            loadedRecords
+              .map(recordToTuple) should contain theSameElementsAs publishedUpdated ++ otherMessages
+          }
+        }
+      }
+
+      /**
+      * val topics                   = NonEmptyList.of(testTopic1, testTopic2)
+      * val (forTopic1, forTopic2) = records(1 to 15).splitAt(10)
+      *
+      * withRunningKafka {
+      * createCustomTopics(topics)
+      *
+      * publishToKafka(testTopic1, forTopic1)
+      * publishToKafka(testTopic2, forTopic2)
+      *
+      * val loadedRecords = TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue
+      *           loadedRecords.map(recordToTuple) should contain theSameElementsAs (forTopic1 ++ forTopic2)
+      * }
+      */
+    }
   }
 
 //  "TopicLoader" should {
+//
+//
 
-//    "complete successfully if the topic is empty" in new TestContext {
-//      withRunningKafka {
-//        createCustomTopic(LoadStateTopic1, partitions = 10)
-//
-//        forEvery(loadStrategy) { strategy =>
-//          loadTestTopic(strategy).futureValue shouldBe Done
-//        }
-//      }
-//    }
-//
-//    "read always from LOG-BEGINNING-OFFSETS" in new TestContext with KafkaConsumer {
-//      val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-//
-//      forEvery(loadStrategy) { strategy =>
-//        withRunningKafka {
-//          createCustomTopic(LoadStateTopic1, partitions = 5)
-//          publishToKafka(LoadStateTopic1, recordsToPublish)
-//
-//          val count = withAssignedConsumer(true, offsetReset = "earliest", LoadStateTopic1)(
-//            consumeAllKafkaRecordsFromEarliestOffset(_).size)
-//          count shouldBe recordsToPublish.size
-//
-//          loadTestTopic(strategy).futureValue shouldBe Done
-//        }
-//      }
-//    }
-//
-//    "work when LOG-BEGINNING-OFFSETS is > 0 (e.g. has been reset)" in new TestContext with KafkaConsumer {
-//      val initialRecords = records(1 to 10, message = "old")
-//      val newRecords     = records(1 to 10, message = "new")
-//      val endRecords     = records(11 to 20, message = "msg")
-//
-//      forEvery(loadStrategy) { strategy =>
-//        val recordStore = new RecordStore()
-//
-//        withRunningKafka {
-//          createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
-//          publishToKafka(LoadStateTopic1, initialRecords)
-//          publishToKafka(LoadStateTopic1, newRecords)
-//
-//          publishToKafka(LoadStateTopic1, endRecords)
-//          moveOffsetToEnd(LoadStateTopic1)
-//          waitForOverridingKafkaMessages(LoadStateTopic1, initialRecords, newRecords)
-//
-//          loadTestTopic(strategy, recordStore.storeRecord).futureValue shouldBe Done
-//          recordStore.recordKeys.futureValue should contain theSameElementsAs (newRecords ++ endRecords).toMap.keys
-//        }
-//      }
-//    }
 //
 //    "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
 //    with KafkaConsumer {

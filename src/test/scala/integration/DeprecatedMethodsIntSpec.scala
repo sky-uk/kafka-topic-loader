@@ -53,15 +53,14 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
         publishToKafka(testTopic1, recordsToPublish)
         moveOffsetToEnd(testTopic1)
 
-        forEvery(loadStrategy) { strategy =>
-          val store = new RecordStore()
-          val loadingStream =
-            TopicLoader.fromPartitions(strategy, topicPartitions, store.storeRecord, stringDeserializer)
+        val store = new RecordStore()
 
-          loadingStream.runWith(Sink.ignore).futureValue shouldBe Done
+        val loadingStream =
+          TopicLoader.fromPartitions(LoadAll, topicPartitions, store.storeRecord, stringDeserializer)
 
-          store.getRecords.futureValue.map(_.partition) should contain only (partitionsToRead.toList: _*)
-        }
+        loadingStream.runWith(Sink.ignore).futureValue shouldBe Done
+
+        store.getRecords.futureValue.map(_.partition) should contain only (partitionsToRead.toList: _*)
       }
     }
   }

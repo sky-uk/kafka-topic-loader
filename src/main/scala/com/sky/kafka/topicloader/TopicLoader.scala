@@ -25,18 +25,85 @@ import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-object TopicLoader extends TopicLoader with DeprecatedMethods
+object TopicLoader extends TopicLoader with DeprecatedMethods {
+  private case class LogOffsets(lowest: Long, highest: Long)
 
-trait TopicLoader {
+  private case class HighestOffsetsWithRecord[K, V](partitionOffsets: Map[TopicPartition, Long],
+                                                    consumerRecord: Option[ConsumerRecord[K, V]] =
+                                                      none[ConsumerRecord[K, V]])
+}
+
+trait TopicLoader extends LazyLogging {
+
+  import TopicLoader._
 
   /**
     * Source that loads the specified topics from the beginning and completes
-    * when the offsets reach the point specified by the requested strategy.
+    * when the offsets reach the point specified by the requested strategy. Materializes to a Future[Consumer.Control]
+    * where the Future represents the retrieval of offsets and the Consumer.Control the Kafka consumer stream.
     */
   def load[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
       strategy: LoadTopicStrategy
-  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Consumer.Control] = ???
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
+
+    val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
+
+    val settings =
+      ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+        .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+        .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+
+    def earliestOffsets(consumer: Consumer[Array[Byte], Array[Byte]],
+                        beginningOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
+      beginningOffsets.keys.map(p => p -> Option(consumer.committed(p)).fold(beginningOffsets(p))(_.offset)).toMap
+
+    def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[ConsumerRecord[K, V], Consumer.Control] = {
+      offsets.foreach { case (partition, offset) => logger.info(s"${offset.show} for $partition") }
+
+      val nonEmptyOffsets   = offsets.filter { case (_, o) => o.highest > o.lowest }
+      val lowestOffsets     = nonEmptyOffsets.mapValues(_.lowest)
+      val allHighestOffsets = HighestOffsetsWithRecord[K, V](nonEmptyOffsets.mapValues(_.highest - 1))
+
+      val filterBelowHighestOffset =
+        Flow[ConsumerRecord[K, V]]
+          .scan(allHighestOffsets)(emitRecordRemovingConsumedPartition)
+          .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
+          .collect { case WithRecord(r) => r }
+
+      Consumer
+        .plainSource(settings, Subscriptions.assignmentWithOffset(lowestOffsets))
+        .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
+        .idleTimeout(config.idleTimeout)
+        .map(deserializeValue[K, V])
+        .via(filterBelowHighestOffset)
+    }
+
+    val partitionsFromTopics: Consumer[Array[Byte], Array[Byte]] => List[TopicPartition] = c =>
+      for {
+        t <- topics.toList
+        p <- c.partitionsFor(t).asScala
+      } yield new TopicPartition(t, p.partition)
+
+    import system.dispatcher
+
+    Source.fromFutureSource {
+      Future {
+        withStandaloneConsumer(settings) { c =>
+          val offsets          = offsetsFrom(partitionsFromTopics(c)) _
+          val beginningOffsets = offsets(c.beginningOffsets)
+          val endOffsets = strategy match {
+            case LoadAll       => offsets(c.endOffsets)
+            case LoadCommitted => earliestOffsets(c, beginningOffsets)
+          }
+
+          beginningOffsets.map {
+            case (k, v) => k -> LogOffsets(v, endOffsets(k))
+          }
+        }
+      }.map(topicDataSource)
+    }
+  }
 
   /**
     * Source that loads the specified topics from the beginning. When
@@ -56,11 +123,66 @@ trait TopicLoader {
       topics: NonEmptyList[String],
   )(implicit system: ActorSystem): Source[(TopicPartition, Source[ConsumerRecord[K, V], Future[Done]]),
                                           Consumer.Control] = ???
+
+  private def lazySource[T](t: => T): Source[T, NotUsed] =
+    Source.single(Always(t)).map(_.value)
+
+  private def withStandaloneConsumer[T](settings: ConsumerSettings[Array[Byte], Array[Byte]])(
+      f: Consumer[Array[Byte], Array[Byte]] => T): T = {
+    val consumer = settings.createKafkaConsumer()
+    try {
+      f(consumer)
+    } finally {
+      consumer.close()
+    }
+  }
+
+  private def offsetsFrom(partitions: List[TopicPartition])(
+      f: JList[TopicPartition] => JMap[TopicPartition, JLong]): Map[TopicPartition, Long] =
+    f(partitions.asJava).asScala.toMap.mapValues(_.longValue)
+
+  private def emitRecordRemovingConsumedPartition[K, V](t: HighestOffsetsWithRecord[K, V],
+                                                        r: ConsumerRecord[K, V]): HighestOffsetsWithRecord[K, V] = {
+    val partitionHighest: Option[Long] = t.partitionOffsets.get(new TopicPartition(r.topic, r.partition))
+    val reachedHighest: Option[TopicPartition] = for {
+      offset  <- partitionHighest
+      highest <- if (r.offset >= offset) new TopicPartition(r.topic, r.partition).some else None
+      _       = logger.info(s"Finished loading data from ${r.topic}-${r.partition}")
+    } yield highest
+
+    val updatedHighests = reachedHighest.fold(t.partitionOffsets)(highest => t.partitionOffsets - highest)
+    val emittableRecord = partitionHighest.collect { case h if r.offset() <= h => r }
+    HighestOffsetsWithRecord(updatedHighests, emittableRecord)
+  }
+
+  private def deserializeValue[K : Deserializer, V : Deserializer](
+      cr: ConsumerRecord[Array[Byte], Array[Byte]]): ConsumerRecord[K, V] =
+    new ConsumerRecord[K, V](
+      cr.topic,
+      cr.partition,
+      cr.offset,
+      cr.timestamp,
+      cr.timestampType,
+      ConsumerRecord.NULL_CHECKSUM.toLong,
+      cr.serializedKeySize,
+      cr.serializedValueSize,
+      KafkaDeserializer[K].deserialize(cr.topic, cr.key),
+      KafkaDeserializer[V].deserialize(cr.topic, cr.value),
+      cr.headers
+    )
+
+  private object WithRecord {
+    def unapply[K, V](h: HighestOffsetsWithRecord[K, V]): Option[ConsumerRecord[K, V]] = h.consumerRecord
+  }
+
+  private implicit val showLogOffsets: Show[LogOffsets] = o =>
+    s"LogOffsets(lowest = ${o.lowest}, highest = ${o.highest})"
+
+  private implicit val showTopicPartitions: Show[Iterable[TopicPartition]] =
+    _.map(tp => s"${tp.topic}:${tp.partition}").mkString(", ")
 }
 
-trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
-
-  type PartitionOffsets = Map[TopicPartition, Long]
+trait DeprecatedMethods { self: TopicLoader =>
 
   /**
     * Consumes the records from the provided topics, passing them through `onRecord`.
@@ -70,13 +192,13 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
       strategy: LoadTopicStrategy,
       topics: NonEmptyList[String],
       onRecord: ConsumerRecord[String, T] => Future[_],
-      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[PartitionOffsets, NotUsed] = {
+      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
     val partitionsFromTopics: Consumer[String, _] => List[TopicPartition] = c =>
       for {
         t <- topics.toList
         p <- c.partitionsFor(t).asScala
       } yield new TopicPartition(t, p.partition)
-    TopicLoader(strategy, partitionsFromTopics, onRecord, valueDeserializer)
+    foo(strategy, partitionsFromTopics, onRecord, valueDeserializer)
 
 //    val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
 //    import system.dispatcher
@@ -99,14 +221,22 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
       strategy: LoadTopicStrategy,
       partitions: NonEmptyList[TopicPartition],
       onRecord: ConsumerRecord[String, T] => Future[_],
-      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[PartitionOffsets, NotUsed] =
-    TopicLoader(strategy, _ => partitions.toList, onRecord, valueDeserializer)
+      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] =
+    foo(strategy, _ => partitions.toList, onRecord, valueDeserializer)
 
   @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.2.8")
-  def apply[T](strategy: LoadTopicStrategy,
-               requiredPartitions: Consumer[String, _] => List[TopicPartition],
-               onRecord: ConsumerRecord[String, T] => Future[_],
-               valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[PartitionOffsets, NotUsed] = {
+  def apply[T](
+      strategy: LoadTopicStrategy,
+      topics: NonEmptyList[String],
+      onRecord: ConsumerRecord[String, T] => Future[_],
+      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] =
+    ???
+
+  private def foo[T](
+      strategy: LoadTopicStrategy,
+      requiredPartitions: Consumer[String, _] => List[TopicPartition],
+      onRecord: ConsumerRecord[String, T] => Future[_],
+      valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
 
     import system.dispatcher
 
@@ -117,7 +247,8 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
-    def earliestOffsets(consumer: Consumer[String, Array[Byte]], beginningOffsets: PartitionOffsets): PartitionOffsets =
+    def earliestOffsets(consumer: Consumer[String, Array[Byte]],
+                        beginningOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
       beginningOffsets.keys.map(p => p -> Option(consumer.committed(p)).fold(beginningOffsets(p))(_.offset)).toMap
 
     def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[Map[TopicPartition, LogOffsets], _] = {
@@ -145,7 +276,7 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
             .plainSource(settings, Subscriptions.assignmentWithOffset(lowestOffsets))
             .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
             .idleTimeout(config.idleTimeout)
-            .map(deserializeValue(_)(valueDeserializer))
+            .map(deserializeValue(_)(new StringDeserializer(), valueDeserializer))
             .via(filterBelowHighestOffset)
             .mapAsync(config.parallelism.value)(handleRecord)
             .fold(offsets) { case (offset, _) => offset }
@@ -171,21 +302,8 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
     offsetsSource.flatMapConcat(topicDataSource).map(_.mapValues(_.highest))
   }
 
-  private def deserializeValue[T](cr: ConsumerRecord[String, Array[Byte]])(
-      implicit valueDeserializer: Deserializer[T]): ConsumerRecord[String, T] =
-    new ConsumerRecord[String, T](
-      cr.topic,
-      cr.partition,
-      cr.offset,
-      cr.timestamp,
-      cr.timestampType,
-      ConsumerRecord.NULL_CHECKSUM.toLong,
-      cr.serializedKeySize,
-      cr.serializedValueSize,
-      cr.key,
-      valueDeserializer.deserialize(cr.topic, cr.value),
-      cr.headers
-    )
+  private def deserializeValue[K : Deserializer, V : Deserializer](
+      cr: ConsumerRecord[String, Array[Byte]]): ConsumerRecord[String, V] = ???
 
   private def emitRecordRemovingConsumedPartition[T](t: HighestOffsetsWithRecord[T],
                                                      r: ConsumerRecord[String, T]): HighestOffsetsWithRecord[T] = {
@@ -222,12 +340,12 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
   }
 
   private def getOffsets(partitions: List[TopicPartition])(
-      f: JList[TopicPartition] => JMap[TopicPartition, JLong]): PartitionOffsets =
+      f: JList[TopicPartition] => JMap[TopicPartition, JLong]): Map[TopicPartition, Long] =
     f(partitions.asJava).asScala.toMap.mapValues(_.longValue)
 
   private case class LogOffsets(lowest: Long, highest: Long)
 
-  private case class HighestOffsetsWithRecord[T](partitionOffsets: PartitionOffsets,
+  private case class HighestOffsetsWithRecord[T](partitionOffsets: Map[TopicPartition, Long],
                                                  consumerRecord: Option[ConsumerRecord[String, T]] =
                                                    none[ConsumerRecord[String, T]])
 
@@ -240,4 +358,8 @@ trait DeprecatedMethods extends LazyLogging { self: TopicLoader =>
 
   private implicit val showTopicPartitions: Show[Iterable[TopicPartition]] =
     _.map(tp => s"${tp.topic}:${tp.partition}").mkString(", ")
+}
+
+object KafkaDeserializer {
+  def apply[T](implicit deserializer: Deserializer[T]): Deserializer[T] = deserializer
 }

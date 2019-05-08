@@ -18,6 +18,7 @@ import org.apache.kafka.common.serialization.{Deserializer, IntegerDeserializer,
 import org.scalatest.Assertion
 import org.scalatest.concurrent.Eventually
 import org.scalatest.prop.Tables.Table
+import net.manub.embeddedkafka.Codecs.stringSerializer
 import utils.RandomPort
 
 import scala.annotation.tailrec
@@ -70,15 +71,14 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
       )
     )
 
-    val compactedTopicConfig = Map(
+    val aggressiveCompactionConfig = Map(
       "cleanup.policy"            -> "compact",
       "delete.retention.ms"       -> "0",
-      "min.insync.replicas"       -> "2",
       "min.cleanable.dirty.ratio" -> "0.01",
       "segment.ms"                -> "10"
     )
 
-    def records(r: Range) = r.toList.map(i => s"k$i" -> s"v$i")
+    def records(r: Range): List[(String, String)] = r.toList.map(i => s"k$i" -> s"v$i")
 
     def recordToTuple[K, V](record: ConsumerRecord[K, V]): (K, V) = (record.key(), record.value())
 
@@ -86,11 +86,20 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
     val testTopic2          = "load-state-topic-2"
     val testTopicPartitions = 5
 
-    val loadStrategy                                      = Table("strategy", LoadAll, LoadCommitted)
     implicit val stringDeserializer: Deserializer[String] = new StringDeserializer
 
-    def createCustomTopics(topics: NonEmptyList[String], partitions: Int): Unit =
+    def createCustomTopics(topics: NonEmptyList[String], partitions: Int = testTopicPartitions): Unit =
       topics.map(createCustomTopic(_, partitions = partitions))
+
+    /*
+     * Note: Compaction is only triggered if messages are published as a separate statement.
+     */
+    def publishMessagesToTriggerCompaction(topic: String): List[(String, String)] = {
+      val (startIndex, numRecords) = (100000, 20)
+      val fillerRecords            = records(startIndex to startIndex + numRecords)
+      publishToKafka(topic, fillerRecords)
+      fillerRecords
+    }
   }
 
   trait KafkaConsumer { this: TestContext =>
@@ -98,16 +107,16 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
     def moveOffsetToEnd(topic: String): Unit =
       withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(0))
 
-    def waitForOverridingKafkaMessages(topic: String,
-                                       initialRecords: List[(String, String)],
-                                       newRecords: List[(String, String)]) =
+    def waitForCompaction(topic: String,
+                          deletedByCompaction: List[(String, String)],
+                          remainingAfterCompaction: List[(String, String)]): Assertion =
       consumeEventually(topic) { r =>
-        r should contain noElementsOf initialRecords
-        r should contain allElementsOf newRecords
+        r should contain noElementsOf deletedByCompaction
+        r should contain allElementsOf remainingAfterCompaction
       }
 
     def consumeEventually(topic: String, groupId: String = UUID.randomUUID().toString)(
-        f: List[(String, String)] => Assertion) =
+        f: List[(String, String)] => Assertion): Assertion =
       eventually {
         val records = withAssignedConsumer(autoCommit = false, offsetReset = "earliest", topic, groupId.some)(
           consumeAllKafkaRecordsFromEarliestOffset(_, List.empty))
