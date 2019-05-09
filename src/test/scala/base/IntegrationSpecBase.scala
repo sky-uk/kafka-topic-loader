@@ -78,7 +78,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
       "segment.ms"                -> "10"
     )
 
-    def records(r: Range): List[(String, String)] = r.toList.map(i => s"k$i" -> s"v$i")
+    def records(r: Seq[Int]): Seq[(String, String)] = r.map(i => s"k$i" -> s"v$i")
 
     def recordToTuple[K, V](record: ConsumerRecord[K, V]): (K, V) = (record.key(), record.value())
 
@@ -94,25 +94,29 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
     /*
      * Note: Compaction is only triggered if messages are published as a separate statement.
      */
-    def publishMessagesToTriggerCompaction(topic: String): List[(String, String)] = {
-      val (startIndex, numRecords) = (100000, 20)
-      val fillerRecords            = records(startIndex to startIndex + numRecords)
-      publishToKafka(topic, fillerRecords)
-      fillerRecords
+    def publishToKafkaAndTriggerCompaction(topic: String, messages: Seq[(String, String)]): Unit = {
+      val fillerSize = 20
+      val filler     = Stream.continually(UUID.randomUUID().toString).take(fillerSize).map(x => (x, x))
+
+      publishToKafka(topic, messages)
+      publishToKafka(topic, filler)
     }
   }
 
   trait KafkaConsumer { this: TestContext =>
 
+    def publishToKafkaAndWaitForCompaction(topic: String, messages: Seq[(String, String)]): Unit = {
+      publishToKafkaAndTriggerCompaction(topic, messages)
+      waitForCompaction(testTopic1)
+    }
+
     def moveOffsetToEnd(topic: String): Unit =
       withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(0))
 
-    def waitForCompaction(topic: String,
-                          deletedByCompaction: List[(String, String)],
-                          remainingAfterCompaction: List[(String, String)]): Assertion =
+    def waitForCompaction(topic: String): Assertion =
       consumeEventually(topic) { r =>
-        r should contain noElementsOf deletedByCompaction
-        r should contain allElementsOf remainingAfterCompaction
+        val messageKeys = r.map { case (k, v) => k }
+        messageKeys should contain theSameElementsAs messageKeys.toSet
       }
 
     def consumeEventually(topic: String, groupId: String = UUID.randomUUID().toString)(

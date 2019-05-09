@@ -112,6 +112,25 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           loadedRecords.map(recordToTuple) should contain theSameElementsAs published
         }
       }
+
+      "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
+      with KafkaConsumer {
+        val published                 = records(1 to 10)
+        val (notUpdated, toBeUpdated) = published.splitAt(5)
+
+        withRunningKafka {
+          createCustomTopic(testTopic1, aggressiveCompactionConfig)
+
+          publishToKafka(testTopic1, published)
+          moveOffsetToEnd(testTopic1)
+          publishToKafkaAndWaitForCompaction(testTopic1, toBeUpdated.map { case (k, v) => (k, v.reverse) })
+
+          val loadedRecords =
+            TopicLoader.load[String, String](NonEmptyList.one(testTopic1), strategy).runWith(Sink.seq).futureValue
+
+          loadedRecords.map(recordToTuple) should contain theSameElementsAs notUpdated
+        }
+      }
     }
 
     "using any strategy" should {
@@ -138,131 +157,103 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           withRunningKafka {
             createCustomTopic(testTopic1, aggressiveCompactionConfig)
 
-            publishToKafka(testTopic1, published ++ publishedUpdated)
-            val otherMessages = publishMessagesToTriggerCompaction(testTopic1)
-
-            moveOffsetToEnd(testTopic1) // FIXME: 2ND ITERATION OF TABLE ALWAYS FAILS WITHOUT THIS
-            waitForCompaction(testTopic1, deletedByCompaction = published, remainingAfterCompaction = publishedUpdated)
+            publishToKafkaAndWaitForCompaction(testTopic1, published ++ publishedUpdated)
 
             val loadedRecords =
               TopicLoader.load[String, String](NonEmptyList.one(testTopic1), strategy).runWith(Sink.seq).futureValue
             loadedRecords
-              .map(recordToTuple) should contain theSameElementsAs publishedUpdated ++ otherMessages
+              .map(recordToTuple) should contain noElementsOf published
           }
         }
       }
+    }
 
-      /**
-      * val topics                   = NonEmptyList.of(testTopic1, testTopic2)
-      * val (forTopic1, forTopic2) = records(1 to 15).splitAt(10)
-      *
-      * withRunningKafka {
-      * createCustomTopics(topics)
-      *
-      * publishToKafka(testTopic1, forTopic1)
-      * publishToKafka(testTopic2, forTopic2)
-      *
-      * val loadedRecords = TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue
-      *           loadedRecords.map(recordToTuple) should contain theSameElementsAs (forTopic1 ++ forTopic2)
-      * }
-      */
+    "???" should {
+
+      "fail if Kafka is unavailable at startup" in new TestContext {
+        override implicit lazy val system: ActorSystem = ActorSystem(
+          "test-actor-system",
+          ConfigFactory.parseString(
+            """
+            |akka.kafka.consumer.kafka-clients {
+            |  bootstrap.servers = "localhost:6001"
+            |  request.timeout.ms = 700
+            |  fetch.max.wait.ms = 500
+            |  session.timeout.ms = 500
+            |  heartbeat.interval.ms = 300
+            |}
+          """.stripMargin
+          )
+        )
+
+        TopicLoader
+          .load[String, String](NonEmptyList.one(testTopic1), LoadAll)
+          .to(Sink.ignore)
+          .run()
+          .failed
+          .futureValue shouldBe a[TimeoutException]
+      }
+
+      "fail if Kafka goes down during processing" in new TestContext {
+
+        override implicit lazy val system: ActorSystem = ActorSystem(
+          "test-actor-system",
+          ConfigFactory.parseString(
+            s"""
+               |topic-loader {
+               |  idle-timeout = 10 second
+               |  buffer-size = 1
+               |}
+               |akka {
+               |  loglevel = "OFF"
+               |  log-config-on-start = off
+               |
+               |  kafka.consumer {
+               |    max-wakeups = 2
+               |    kafka-clients {
+               |      fetch.max.bytes = 1
+               |      bootstrap.servers = "localhost:${kafkaConfig.kafkaPort}"
+               |    }
+               |  }
+               |}
+             """.stripMargin
+          )
+        )
+
+        val published    = records(1 to 100)
+        val timingOutKey = published.drop(5).head._1
+
+        val broker = EmbeddedKafka.start()
+        //withRunningKafka {
+        createCustomTopic(testTopic1)
+
+        publishToKafka(testTopic1, published)
+
+        TopicLoader
+          .load[String, String](NonEmptyList.one(testTopic1), LoadAll)
+          .to(Sink.foreachAsync(1) { message =>
+            println(message)
+            if (message.key() == timingOutKey) {
+              println("STOPPING THE THING")
+              Future {
+                broker.stop(clearLogs = true)
+              }
+            } else
+              Future.unit
+          })
+          .run()
+          .failed
+          .futureValue shouldBe a[TimeoutException]
+      }
+      // }
     }
   }
 
 //  "TopicLoader" should {
 //
 //
+//
 
-//
-//    "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
-//    with KafkaConsumer {
-//      val recordStore              = new RecordStore()
-//      val initialRecordsToStay     = records(1 to 5, "init")
-//      val initialRecordsToOverride = records(6 to 10, "will be overridden")
-//      val overridingRecords        = records(6 to 10, "new")
-//
-//      withRunningKafka {
-//        createCustomTopic(LoadStateTopic1, compactedTopicConfig, partitions = 2)
-//
-//        publishToKafka(LoadStateTopic1, initialRecordsToStay ++ initialRecordsToOverride)
-//        moveOffsetToEnd(LoadStateTopic1)
-//
-//        publishToKafka(LoadStateTopic1, overridingRecords)
-//        publishToKafka(LoadStateTopic1, records(11 to 20, "new"))
-//        waitForOverridingKafkaMessages(LoadStateTopic1, initialRecordsToOverride, overridingRecords)
-//
-//        loadTestTopic(LoadCommitted, recordStore.storeRecord).futureValue shouldBe Done
-//
-//        val recordKeys = recordStore.getRecords.map(_.map(_.key)).futureValue
-//        recordKeys should contain theSameElementsAs initialRecordsToStay.map(_._1)
-//      }
-//    }
-//
-//    "throw if Kafka is unavailable at startup" in new TestContext {
-//      override implicit lazy val system: ActorSystem = ActorSystem(
-//        "test-actor-system",
-//        ConfigFactory.parseString(
-//          """
-//          |akka.kafka.consumer.kafka-clients {
-//          |  bootstrap.servers = "localhost:6001"
-//          |  request.timeout.ms = 700
-//          |  fetch.max.wait.ms = 500
-//          |  session.timeout.ms = 500
-//          |  heartbeat.interval.ms = 300
-//          |}
-//        """.stripMargin
-//        )
-//      )
-//
-//      loadTestTopic(LoadAll).failed.futureValue shouldBe a[TimeoutException]
-//    }
-//
-//    "fail the source if Kafka goes down during processing" in new TestContext with DelayedProbe {
-//
-//      override implicit lazy val system: ActorSystem = ActorSystem(
-//        "test-actor-system",
-//        ConfigFactory.parseString(
-//          s"""
-//           |topic-loader {
-//           |  idle-timeout = 1 second
-//           |  buffer-size = 1
-//           |  parallelism = 2
-//           |}
-//           |akka {
-//           |  loglevel = "OFF"
-//           |  log-config-on-start = off
-//           |
-//           |  kafka.consumer {
-//           |    max-wakeups = 2
-//           |    kafka-clients {
-//           |      fetch.max.bytes = 1
-//           |      bootstrap.servers = "localhost:${kafkaConfig.kafkaPort}"
-//           |    }
-//           |  }
-//           |}
-//      """.stripMargin
-//        )
-//      )
-//
-//      val slowProbe = delayedProbe(100.millis, Unit)
-//
-//      val result = withRunningKafka {
-//        val recordsToPublish = records(1 to 15, UUID.randomUUID().toString)
-//
-//        createCustomTopic(LoadStateTopic1, partitions = 12)
-//        publishToKafka(LoadStateTopic1, recordsToPublish)
-//
-//        val callSlowProbe: ConsumerRecord[String, String] => Future[Int] = _ => (slowProbe.ref ? 123).map(_ => 0)
-//
-//        val res = loadTestTopic(LoadAll, callSlowProbe)
-//
-//        slowProbe.expectMsgType[Int](10.seconds)
-//
-//        res
-//      }
-//
-//      result.failed.futureValue shouldBe a[java.util.concurrent.TimeoutException]
-//    }
 //
 //    "fail when Kafka is too slow for client to start" in new TestContext {
 //
