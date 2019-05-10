@@ -1,7 +1,7 @@
 package integration
 
 import akka.actor.ActorSystem
-import akka.stream.scaladsl.Sink
+import akka.stream.scaladsl.{Keep, Sink}
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.sky.kafka.topicloader._
@@ -211,6 +211,30 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 //      "fail if it goes down during processing"
 //      Testable only when upgrading to >1.0.0: https://github.com/akka/alpakka-kafka/issues/329
 //      Same as above, but `timingOutKey` should tear down EmbeddedKafka.
+    }
+  }
+
+  "loadAndRun" should {
+
+    "execute callback when finished loading and keep streaming" in new TestContext {
+      val (preLoad, postLoad) = records(1 to 15).splitAt(10)
+
+      withRunningKafka {
+        createCustomTopic(testTopic1)
+
+        publishToKafka(testTopic1, preLoad)
+
+        val ((callback, control), records) =
+          TopicLoader.loadAndRun[String, String](NonEmptyList.one(testTopic1)).toMat(Sink.seq)(Keep.both).run()
+
+        whenReady(callback) { _ =>
+          publishToKafka(testTopic1, postLoad)
+
+          control.futureValue.shutdown()
+
+          records.futureValue.map(recordToTuple) should contain theSameElementsAs (preLoad ++ postLoad)
+        }
+      }
     }
   }
 

@@ -8,7 +8,7 @@ import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.stream.OverflowStrategy
-import akka.stream.scaladsl.{Flow, Source}
+import akka.stream.scaladsl.{Flow, Keep, Source}
 import cats.data.NonEmptyList
 import cats.syntax.option._
 import cats.syntax.show._
@@ -88,7 +88,19 @@ trait TopicLoader extends LazyLogging {
     */
   def loadAndRun[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
-  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = ???
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
+    val config      = loadConfigOrThrow[Config](system.settings.config).topicLoader
+    val logOffsetsF = logOffsetsForTopics(topics, LoadAll)
+
+    val postLoadingSource = Source.fromFutureSource(logOffsetsF.map { logOffsets =>
+      val highestOffsets = logOffsets.mapValues(_.highest)
+      kafkaSource[K, V](highestOffsets, config)
+    }(system.dispatcher))
+
+    load[K, V](logOffsetsF, config)
+      .watchTermination()(Keep.right)
+      .concatMat(postLoadingSource)(Keep.both)
+  }
 
   /**
     * Same as [[TopicLoader.loadAndRun]], but with one stream per partition.
@@ -157,11 +169,7 @@ trait TopicLoader extends LazyLogging {
           .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
           .collect { case WithRecord(r) => r }
 
-      Consumer
-        .plainSource(settings, Subscriptions.assignmentWithOffset(lowestOffsets))
-        .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
-        .idleTimeout(config.idleTimeout)
-        .map(cr => cr.bimap(_.deserialize[K](cr.topic), _.deserialize[V](cr.topic)))
+      kafkaSource[K, V](lowestOffsets, config)
         .via(filterBelowHighestOffset)
         .watchTermination() {
           case (mat, terminationF) =>
@@ -178,6 +186,14 @@ trait TopicLoader extends LazyLogging {
       logOffsets.map(topicDataSource)
     }
   }
+
+  private def kafkaSource[K : Deserializer, V : Deserializer](startingOffsets: Map[TopicPartition, Long],
+                                                              config: TopicLoaderConfig)(implicit system: ActorSystem) =
+    Consumer
+      .plainSource(settings, Subscriptions.assignmentWithOffset(startingOffsets))
+      .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
+      .idleTimeout(config.idleTimeout)
+      .map(cr => cr.bimap(_.deserialize[K](cr.topic), _.deserialize[V](cr.topic)))
 
   private def settings(implicit system: ActorSystem) =
     ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
