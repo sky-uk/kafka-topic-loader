@@ -1,8 +1,5 @@
 package integration
 
-import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
-
 import akka.Done
 import akka.actor.{Actor, ActorSystem, Props}
 import akka.pattern.ask
@@ -14,8 +11,6 @@ import com.sky.kafka.topicloader._
 import net.manub.embeddedkafka.Codecs.stringSerializer
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.serialization._
-import org.scalatest.prop.TableDrivenPropertyChecks._
 
 import scala.collection.JavaConverters._
 import scala.concurrent.Future

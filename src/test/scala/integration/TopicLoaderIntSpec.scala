@@ -1,46 +1,17 @@
 package integration
 
-import java.util.UUID
-import java.util.concurrent.atomic.AtomicInteger
-
 import akka.Done
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import akka.kafka.{ConsumerSettings, Subscriptions}
-import akka.kafka.scaladsl.Consumer
-import akka.stream.scaladsl.{Keep, Sink, Source}
-import akka.testkit.{TestActor, TestProbe}
-import akka.pattern.ask
-import akka.stream.OverflowStrategy
-import akka.util.Timeout
-import base.{AkkaSpecBase, IntegrationSpecBase, WordSpecBase}
+import akka.actor.ActorSystem
+import akka.stream.scaladsl.{Keep, Sink}
+import base.IntegrationSpecBase
 import cats.data.NonEmptyList
-import cats.syntax.option._
-import cats.syntax.functor._
 import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
-import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
-import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.consumer._
-import org.apache.kafka.clients.producer.ProducerConfig
+import net.manub.embeddedkafka.Codecs.stringSerializer
+import net.manub.embeddedkafka.EmbeddedKafka
 import org.apache.kafka.common.errors.TimeoutException
-import org.apache.kafka.common.serialization._
-import org.scalatest.concurrent.Eventually
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
-import utils.RandomPort
-import eu.timepit.refined.auto._
-import org.apache.kafka.common.TopicPartition
-import org.scalatest.Assertion
-import net.manub.embeddedkafka.Codecs.stringSerializer
-
-import scala.annotation.tailrec
-import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration._
-import cats.implicits.catsStdInstancesForList
-import cats.kernel.Order
-
-import scala.collection.mutable.MutableList
 
 class TopicLoaderIntSpec extends IntegrationSpecBase {
 
