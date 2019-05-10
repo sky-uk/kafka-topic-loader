@@ -1,17 +1,18 @@
 package integration
 
-import akka.Done
 import akka.actor.ActorSystem
-import akka.stream.scaladsl.{Keep, Sink}
+import akka.stream.scaladsl.Sink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.Codecs.stringSerializer
-import net.manub.embeddedkafka.EmbeddedKafka
-import org.apache.kafka.common.errors.TimeoutException
+import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException}
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
+import java.util.concurrent.{TimeoutException => JavaTimeoutException}
+
+import scala.concurrent.Future
 
 class TopicLoaderIntSpec extends IntegrationSpecBase {
 
@@ -165,63 +166,51 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           .to(Sink.ignore)
           .run()
           .failed
-          .futureValue shouldBe a[TimeoutException]
+          .futureValue shouldBe a[KafkaTimeoutException]
       }
 
-      "fail if it goes down during processing FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME " ignore new TestContext {
+      "fail if the stream is idle for longer than configured" in new TestContext {
 
         override implicit lazy val system: ActorSystem = ActorSystem(
           "test-actor-system",
           ConfigFactory.parseString(
             s"""
                |topic-loader {
-               |  idle-timeout = 5 minutes
-               |  buffer-size = 1
+               |  idle-timeout = 1 second
                |}
-               |akka {
-               |  loglevel = DEBUG
-               |  log-config-on-start = off
-               |
-               |  kafka.consumer {
-               |    max-wakeups = 2
-               |    wakeup-timeout = 500ms
-               |    wakeup-debug = true
-               |    kafka-clients {
-               |      fetch.max.bytes = 20
-               |      request.timeout.ms = 300
-               |      session.timeout.ms = 200
-               |      fetch.max.wait.ms = 200
-               |      heartbeat.interval.ms = 100
-               |      bootstrap.servers = "localhost:${kafkaConfig.kafkaPort}"
-               |    }
+               |akka.kafka.consumer {
+               |  kafka-clients {
+               |    bootstrap.servers = "localhost:${kafkaConfig.kafkaPort}"
                |  }
                |}
              """.stripMargin
           )
         )
 
-        val published    = records(1 to 1000)
+        val published    = records(1 to 10)
         val timingOutKey = published.drop(5).head._1
 
-        EmbeddedKafka.start()
-        createCustomTopic(testTopic1)
+        withRunningKafka {
+          createCustomTopic(testTopic1)
+          publishToKafka(testTopic1, published)
 
-        publishToKafka(testTopic1, published)
-
-        val (stoff, moreStoof) = TopicLoader
-          .load[String, String](NonEmptyList.one(testTopic1), LoadAll)
-          .toMat(Sink.ignore)(Keep.both)
-          .run()
-
-        stoff.onComplete { _ =>
-          println("this is dumb, what is software")
-          EmbeddedKafka.stop()
+          TopicLoader
+            .load[String, String](NonEmptyList.one(testTopic1), LoadAll)
+            .runWith(Sink.foreachAsync(1) { message =>
+              if (message.key == timingOutKey) {
+                Future.never
+              } else {
+                Future.unit
+              }
+            })
+            .failed
+            .futureValue shouldBe a[JavaTimeoutException]
         }
-
-        stoff.futureValue.isShutdown.futureValue shouldBe Done
-
-        moreStoof.failed.futureValue shouldBe a[TimeoutException]
       }
+
+//      "fail if it goes down during processing"
+//      Testable only when upgrading to >1.0.0: https://github.com/akka/alpakka-kafka/issues/329
+//      Same as above, but `timingOutKey` should tear down EmbeddedKafka.
     }
   }
 
