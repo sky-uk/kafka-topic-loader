@@ -13,6 +13,7 @@ import cats.data.NonEmptyList
 import cats.syntax.option._
 import cats.syntax.show._
 import cats.{Always, Show}
+import com.sky.kafka.topicloader
 import com.typesafe.scalalogging.LazyLogging
 import eu.timepit.refined.pureconfig._
 import org.apache.kafka.clients.consumer._
@@ -26,7 +27,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 object TopicLoader extends TopicLoader with DeprecatedMethods {
-  private case class LogOffsets(lowest: Long, highest: Long)
+  private[topicloader] case class LogOffsets(lowest: Long, highest: Long)
 
   private case class HighestOffsetsWithRecord[K, V](partitionOffsets: Map[TopicPartition, Long],
                                                     consumerRecord: Option[ConsumerRecord[K, V]] =
@@ -46,17 +47,63 @@ trait TopicLoader extends LazyLogging {
       topics: NonEmptyList[String],
       strategy: LoadTopicStrategy
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
-
     val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
+    load(fetchLogOffsets(topics, strategy), config)
+  }
 
-    val settings =
-      ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
-        .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-        .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+  /**
+    * Source that loads the specified topics from the beginning. When
+    * the latest current offests are reached, the materialised value is
+    * completed, and the stream continues.
+    */
+  def loadAndRun[K : Deserializer, V : Deserializer](
+      topics: NonEmptyList[String],
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Consumer.Control)] = ???
+
+  /**
+    * Same as [[TopicLoader.loadAndRun]], but with one stream per partition.
+    * See [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for an
+    * explanation of how the outer Source works.
+    */
+  def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
+      topics: NonEmptyList[String],
+  )(implicit system: ActorSystem): Source[(TopicPartition, Source[ConsumerRecord[K, V], Future[Done]]),
+                                          Consumer.Control] = ???
+
+  protected def fetchLogOffsets(topics: NonEmptyList[String], strategy: LoadTopicStrategy)(
+      implicit system: ActorSystem): Future[Map[TopicPartition, LogOffsets]] = {
+    val partitionsFromTopics: Consumer[Array[Byte], Array[Byte]] => List[TopicPartition] = c =>
+      for {
+        t <- topics.toList
+        p <- c.partitionsFor(t).asScala
+      } yield new TopicPartition(t, p.partition)
 
     def earliestOffsets(consumer: Consumer[Array[Byte], Array[Byte]],
                         beginningOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
       beginningOffsets.keys.map(p => p -> Option(consumer.committed(p)).fold(beginningOffsets(p))(_.offset)).toMap
+
+    import system.dispatcher
+
+    Future {
+      withStandaloneConsumer(settings) { c =>
+        val offsets          = offsetsFrom(partitionsFromTopics(c)) _
+        val beginningOffsets = offsets(c.beginningOffsets)
+        val endOffsets = strategy match {
+          case LoadAll       => offsets(c.endOffsets)
+          case LoadCommitted => earliestOffsets(c, beginningOffsets)
+        }
+
+        beginningOffsets.map {
+          case (k, v) => k -> LogOffsets(v, endOffsets(k))
+        }
+      }
+    }
+  }
+
+  protected def load[K : Deserializer, V : Deserializer](
+      logOffsets: Future[Map[TopicPartition, LogOffsets]],
+      config: TopicLoaderConfig
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
 
     def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[ConsumerRecord[K, V], Consumer.Control] = {
       offsets.foreach { case (partition, offset) => logger.info(s"${offset.show} for $partition") }
@@ -79,50 +126,17 @@ trait TopicLoader extends LazyLogging {
         .via(filterBelowHighestOffset)
     }
 
-    val partitionsFromTopics: Consumer[Array[Byte], Array[Byte]] => List[TopicPartition] = c =>
-      for {
-        t <- topics.toList
-        p <- c.partitionsFor(t).asScala
-      } yield new TopicPartition(t, p.partition)
-
     import system.dispatcher
 
     Source.fromFutureSource {
-      Future {
-        withStandaloneConsumer(settings) { c =>
-          val offsets          = offsetsFrom(partitionsFromTopics(c)) _
-          val beginningOffsets = offsets(c.beginningOffsets)
-          val endOffsets = strategy match {
-            case LoadAll       => offsets(c.endOffsets)
-            case LoadCommitted => earliestOffsets(c, beginningOffsets)
-          }
-
-          beginningOffsets.map {
-            case (k, v) => k -> LogOffsets(v, endOffsets(k))
-          }
-        }
-      }.map(topicDataSource)
+      logOffsets.map(topicDataSource)
     }
   }
 
-  /**
-    * Source that loads the specified topics from the beginning. When
-    * the latest current offests are reached, the materialised value is
-    * completed, and the stream continues.
-    */
-  def loadAndRun[K : Deserializer, V : Deserializer](
-      topics: NonEmptyList[String],
-  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Consumer.Control)] = ???
-
-  /**
-    * Same as [[TopicLoader.loadAndRun]], but with one stream per partition.
-    * See [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for an
-    * explanation of how the outer Source works.
-    */
-  def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
-      topics: NonEmptyList[String],
-  )(implicit system: ActorSystem): Source[(TopicPartition, Source[ConsumerRecord[K, V], Future[Done]]),
-                                          Consumer.Control] = ???
+  private def settings(implicit system: ActorSystem) =
+    ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+      .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+      .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
 
   private def lazySource[T](t: => T): Source[T, NotUsed] =
     Source.single(Always(t)).map(_.value)
@@ -193,17 +207,17 @@ trait DeprecatedMethods { self: TopicLoader =>
       topics: NonEmptyList[String],
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
-    // FIXME don't want to read this config more than once
     val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
+
     import system.dispatcher
 
-    load[String, T](topics, strategy)(keySerializer, valueDeserializer, system)
+    val logOffsets = fetchLogOffsets(topics, strategy)
+    load[String, T](logOffsets, config)(keySerializer, valueDeserializer, system)
       .mapMaterializedValue(_ => NotUsed)
       .mapAsync(config.parallelism.value)(r => onRecord(r).map(_ => r))
-      .fold(Map.empty[TopicPartition, Long]) {
-        case (po, r) =>
-          po + (new TopicPartition(r.topic, r.partition) -> r.offset)
-      }
+      .fold(logOffsets) { case (acc, _) => acc }
+      .flatMapConcat(Source.fromFuture(_))
+      .map(_.mapValues(_.highest))
   }
 
   private lazy val keySerializer = new StringDeserializer

@@ -45,30 +45,55 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
     }
 
     "emit last offsets consumed" in new TestContext with KafkaConsumer {
-      val recordsToPublish = records(1 to 15)
-
       withRunningKafka {
         createCustomTopic(testTopic1, partitions = 5)
-        publishToKafka(testTopic1, recordsToPublish)
+        publishToKafka(testTopic1, records(1 to 15))
 
-//        val highestOffsets = withAssignedConsumer(autoCommit = false, offsetReset = "latest", testTopic1) { consumer =>
-//          val tp = consumer.partitionsFor(testTopic1).asScala.map(pi => new TopicPartition(pi.topic, pi.partition))
-//          consumer.endOffsets(tp.asJava).asScala
-//        }
-        import cats.implicits._
-        val partitions = 0 to 4 map (partitionNumber => new TopicPartition(testTopic1, partitionNumber))
-
-        val highestOffsets = withAssignedConsumer(false, "latest", testTopic1)(consumer =>
-          partitions.toList.fproduct(consumer.position).toMap)
+        val highestOffsets = withAssignedConsumer(autoCommit = false, offsetReset = "latest", testTopic1) { consumer =>
+          val tp = consumer.partitionsFor(testTopic1).asScala.map(pi => new TopicPartition(pi.topic, pi.partition))
+          consumer.endOffsets(tp.asJava).asScala
+        }
 
         TopicLoader
           .fromTopics[String](LoadAll, NonEmptyList.one(testTopic1), _ => Future.unit, stringDeserializer)
           .runWith(Sink.seq)
           .futureValue should contain theSameElementsAs Seq(highestOffsets)
       }
-
     }
 
+    "emit highest offsets even when not consumed anything" in new TestContext with KafkaConsumer {
+      withRunningKafka {
+        createCustomTopic(testTopic1, partitions = 5)
+
+        val lowestOffsets = withAssignedConsumer(autoCommit = false, offsetReset = "latest", testTopic1) { consumer =>
+          val tp = consumer.partitionsFor(testTopic1).asScala.map(pi => new TopicPartition(pi.topic, pi.partition))
+          consumer.beginningOffsets(tp.asJava).asScala
+        }
+
+        TopicLoader
+          .fromTopics[String](LoadCommitted, NonEmptyList.one(testTopic1), _ => ???, stringDeserializer)
+          .runWith(Sink.seq)
+          .futureValue should contain theSameElementsAs Seq(lowestOffsets)
+      }
+    }
+
+    "fail when store record is unsuccessful" in new TestContext {
+      val exception = new Exception("boom!")
+      val failingHandler: ConsumerRecord[String, String] => Future[Int] =
+        _ => Future.failed(exception)
+
+      withRunningKafka {
+        createCustomTopics(NonEmptyList.one(testTopic1))
+
+        publishToKafka(testTopic1, records(1 to 15))
+
+        TopicLoader
+          .fromTopics[String](LoadAll, NonEmptyList.one(testTopic1), failingHandler, stringDeserializer)
+          .runWith(Sink.seq)
+          .failed
+          .futureValue shouldBe exception
+      }
+    }
   }
 
   "fromPartitions" should {
@@ -93,37 +118,6 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
       }
     }
   }
-
-//    "fail when store record is unsuccessful" in new TestContext {
-//      val boom = new Exception("boom!")
-//      val failingHandler: ConsumerRecord[String, String] => Future[Int] =
-//        _ => Future.failed(boom)
-//
-//      withRunningKafka {
-//        createCustomTopics(List(LoadStateTopic1, LoadStateTopic2), partitions = 5)
-//
-//        publishToKafka(LoadStateTopic1, List(UUID.randomUUID().toString -> "1"))
-//
-//        loadTestTopic(LoadAll, failingHandler).failed.futureValue shouldBe boom
-//      }
-//    }
-//
-
-//    "emit highest offsets even when not consumed anything" in new TestContext with KafkaConsumer {
-//      val partitions = 1 to 5 map (partitionNumber => new TopicPartition(LoadStateTopic1, partitionNumber - 1))
-//      withRunningKafka {
-//        createCustomTopic(LoadStateTopic1, partitions = partitions.size)
-//
-//        withAssignedConsumer(false, "latest", LoadStateTopic1) { consumer =>
-//          val highestOffsets = partitions.toList.fproduct(consumer.position).toMap
-//
-//          testTopicLoader(LoadAll, NonEmptyList.one(LoadStateTopic1), _ => Future.unit)
-//            .runWith(Sink.head)
-//            .futureValue shouldBe highestOffsets
-//        }
-//      }
-//    }
-//  }
 
   class RecordStore()(implicit system: ActorSystem) {
     private val storeActor = system.actorOf(Props(classOf[Store], RecordStore.this))
