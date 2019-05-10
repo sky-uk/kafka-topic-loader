@@ -193,22 +193,17 @@ trait DeprecatedMethods { self: TopicLoader =>
       topics: NonEmptyList[String],
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
-    val partitionsFromTopics: Consumer[String, _] => List[TopicPartition] = c =>
-      for {
-        t <- topics.toList
-        p <- c.partitionsFor(t).asScala
-      } yield new TopicPartition(t, p.partition)
-    foo(strategy, partitionsFromTopics, onRecord, valueDeserializer)
+    // FIXME don't want to read this config more than once
+    val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
+    import system.dispatcher
 
-//    val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
-//    import system.dispatcher
-//
-//    load[String, T](topics, strategy)(keySerializer, valueDeserializer, system)
-//      .mapMaterializedValue(_ => NotUsed)
-//      .mapAsync(config.parallelism.value)(r => onRecord(r).map(_ => r))
-//      .fold(Map.empty[TopicPartition, Long]) { case (po, r) =>
-//        po + (new TopicPartition(r.topic, r.partition) -> r.offset)
-//      }
+    load[String, T](topics, strategy)(keySerializer, valueDeserializer, system)
+      .mapMaterializedValue(_ => NotUsed)
+      .mapAsync(config.parallelism.value)(r => onRecord(r).map(_ => r))
+      .fold(Map.empty[TopicPartition, Long]) {
+        case (po, r) =>
+          po + (new TopicPartition(r.topic, r.partition) -> r.offset)
+      }
   }
 
   private lazy val keySerializer = new StringDeserializer
