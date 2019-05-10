@@ -12,11 +12,12 @@ import akka.stream.scaladsl.{Flow, Source}
 import cats.data.NonEmptyList
 import cats.syntax.option._
 import cats.syntax.show._
-import cats.{Always, Show}
+import cats.{Always, Bifunctor, Show}
 import com.typesafe.scalalogging.LazyLogging
 import eu.timepit.refined.pureconfig._
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, Deserializer, StringDeserializer}
+import cats.syntax.bifunctor._
 import org.apache.kafka.common.TopicPartition
 import pureconfig._
 import pureconfig.generic.auto._
@@ -56,7 +57,7 @@ trait TopicLoader extends LazyLogging {
     */
   def loadAndRun[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
-  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Consumer.Control)] = ???
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = ???
 
   /**
     * Same as [[TopicLoader.loadAndRun]], but with one stream per partition.
@@ -66,7 +67,7 @@ trait TopicLoader extends LazyLogging {
   def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
   )(implicit system: ActorSystem): Source[(TopicPartition, Source[ConsumerRecord[K, V], Future[Done]]),
-                                          Consumer.Control] = ???
+                                          Future[Consumer.Control]] = ???
 
   protected def logOffsetsForPartitions(topicPartitions: NonEmptyList[TopicPartition], strategy: LoadTopicStrategy)(
       implicit system: ActorSystem): Future[Map[TopicPartition, LogOffsets]] =
@@ -125,12 +126,21 @@ trait TopicLoader extends LazyLogging {
           .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
           .collect { case WithRecord(r) => r }
 
+      import KafkaDeserializer._
+
       Consumer
         .plainSource(settings, Subscriptions.assignmentWithOffset(lowestOffsets))
         .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
         .idleTimeout(config.idleTimeout)
-        .map(deserializeValue[K, V])
+        .map(cr => cr.bimap(_.deserialize[K](cr.topic), _.deserialize[V](cr.topic)))
         .via(filterBelowHighestOffset)
+        .watchTermination() {
+          case (mat, terminationF) =>
+            terminationF.onComplete(
+              _.fold(logger.error(s"Error occurred while loading data from ${offsets.keys.show}", _),
+                     _ => logger.info(s"Successfully loaded data from ${offsets.keys.show}")))(system.dispatcher)
+            mat
+        }
     }
 
     import system.dispatcher
@@ -176,22 +186,6 @@ trait TopicLoader extends LazyLogging {
     HighestOffsetsWithRecord(updatedHighests, emittableRecord)
   }
 
-  private def deserializeValue[K : Deserializer, V : Deserializer](
-      cr: ConsumerRecord[Array[Byte], Array[Byte]]): ConsumerRecord[K, V] =
-    new ConsumerRecord[K, V](
-      cr.topic,
-      cr.partition,
-      cr.offset,
-      cr.timestamp,
-      cr.timestampType,
-      ConsumerRecord.NULL_CHECKSUM.toLong,
-      cr.serializedKeySize,
-      cr.serializedValueSize,
-      KafkaDeserializer[K].deserialize(cr.topic, cr.key),
-      KafkaDeserializer[V].deserialize(cr.topic, cr.value),
-      cr.headers
-    )
-
   private object WithRecord {
     def unapply[K, V](h: HighestOffsetsWithRecord[K, V]): Option[ConsumerRecord[K, V]] = h.consumerRecord
   }
@@ -228,7 +222,7 @@ trait DeprecatedMethods { self: TopicLoader =>
     deprecatedLoad(strategy, logOffsets, onRecord, valueDeserializer)
   }
 
-  private lazy val keySerializer = new StringDeserializer
+  private val keySerializer = new StringDeserializer
 
   /**
     * Consumes the records from the provided partitions, passing them through `onRecord`.
@@ -256,11 +250,31 @@ trait DeprecatedMethods { self: TopicLoader =>
       .mapMaterializedValue(_ => NotUsed)
       .mapAsync(config.parallelism.value)(r => onRecord(r).map(_ => r))
       .fold(logOffsets) { case (acc, _) => acc }
-      .flatMapConcat(Source.fromFuture(_))
+      .flatMapConcat(Source.fromFuture)
       .map(_.mapValues(_.highest))
   }
 }
 
 object KafkaDeserializer {
-  def apply[T](implicit deserializer: Deserializer[T]): Deserializer[T] = deserializer
+
+  implicit class DeserializerOps(val bytes: Array[Byte]) extends AnyVal {
+    def deserialize[T](topic: String)(implicit ds: Deserializer[T]): T = ds.deserialize(topic, bytes)
+  }
+
+  implicit val crBiFunctor: Bifunctor[ConsumerRecord] = new Bifunctor[ConsumerRecord] {
+    override def bimap[A, B, C, D](fab: ConsumerRecord[A, B])(f: A => C, g: B => D): ConsumerRecord[C, D] =
+      new ConsumerRecord[C, D](
+        fab.topic,
+        fab.partition,
+        fab.offset,
+        fab.timestamp,
+        fab.timestampType,
+        ConsumerRecord.NULL_CHECKSUM.toLong,
+        fab.serializedKeySize,
+        fab.serializedValueSize,
+        f(fab.key),
+        g(fab.value),
+        fab.headers
+      )
+  }
 }
