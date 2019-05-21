@@ -36,6 +36,7 @@ val RefinedVersion = "0.9.3"
 // @formatter:off
 libraryDependencies ++= Seq(
   "com.typesafe.akka"           %% "akka-stream"              % AkkaVersion,
+  "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion,
   "com.typesafe.akka"           %% "akka-stream-kafka"        % "0.22",
   "com.typesafe.scala-logging"  %% "scala-logging"            % "3.7.2",
   "org.typelevel"               %% "cats-core"                % CatsVersion,
@@ -49,6 +50,8 @@ libraryDependencies ++= Seq(
   "net.manub"                   %% "scalatest-embedded-kafka" % "1.1.0"       % Test
 )
 // @formatter:on
+
+resolvers += "segence" at "https://dl.bintray.com/segence/maven-oss-releases/"
 
 addCommandAlias("checkFmt", ";scalafmt::test; test:scalafmt::test; sbt:scalafmt::test")
 addCommandAlias("runFmt", ";scalafmt; test:scalafmt; sbt:scalafmt")

@@ -1,9 +1,11 @@
 # SBT
 target/
+.bloop/
 
 # IDE
-.idea
+.idea/
 *.iml
+.metals/
 
 # Scala
 *.class

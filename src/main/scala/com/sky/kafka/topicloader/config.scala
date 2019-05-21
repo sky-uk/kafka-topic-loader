@@ -18,4 +18,5 @@ final case class Config(topicLoader: TopicLoaderConfig)
   */
 final case class TopicLoaderConfig(idleTimeout: FiniteDuration,
                                    bufferSize: Int Refined Positive,
+//    @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.3.0")
                                    parallelism: Int Refined Positive = 1)
