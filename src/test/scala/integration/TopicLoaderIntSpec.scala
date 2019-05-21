@@ -1,7 +1,10 @@
 package integration
 
+import java.util.concurrent.{TimeoutException => JavaTimeoutException}
+
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.{Keep, Sink}
+import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.sky.kafka.topicloader._
@@ -10,7 +13,6 @@ import net.manub.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException}
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
-import java.util.concurrent.{TimeoutException => JavaTimeoutException}
 
 import scala.concurrent.Future
 
@@ -224,15 +226,16 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
         publishToKafka(testTopic1, preLoad)
 
-        val ((callback, control), records) =
-          TopicLoader.loadAndRun[String, String](NonEmptyList.one(testTopic1)).toMat(Sink.seq)(Keep.both).run()
+        val ((callback, _), recordsProbe) =
+          TopicLoader.loadAndRun[String, String](NonEmptyList.one(testTopic1)).toMat(TestSink.probe)(Keep.both).run()
+
+        recordsProbe.request(preLoad.size + postLoad.size)
+        recordsProbe.expectNextN(preLoad.size).map(recordToTuple) shouldBe preLoad
 
         whenReady(callback) { _ =>
           publishToKafka(testTopic1, postLoad)
 
-          control.futureValue.shutdown()
-
-          records.futureValue.map(recordToTuple) should contain theSameElementsAs (preLoad ++ postLoad)
+          recordsProbe.expectNextN(postLoad.size).map(recordToTuple) shouldBe postLoad
         }
       }
     }

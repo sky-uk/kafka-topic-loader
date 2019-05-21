@@ -102,16 +102,6 @@ trait TopicLoader extends LazyLogging {
       .concatMat(postLoadingSource)(Keep.both)
   }
 
-  /**
-    * Same as [[TopicLoader.loadAndRun]], but with one stream per partition.
-    * See [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for an
-    * explanation of how the outer Source works.
-    */
-  def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
-      topics: NonEmptyList[String],
-  )(implicit system: ActorSystem): Source[(TopicPartition, Source[ConsumerRecord[K, V], Future[Done]]),
-                                          Future[Consumer.Control]] = ???
-
   protected def logOffsetsForPartitions(topicPartitions: NonEmptyList[TopicPartition], strategy: LoadTopicStrategy)(
       implicit system: ActorSystem): Future[Map[TopicPartition, LogOffsets]] =
     fetchLogOffsets(_ => topicPartitions.toList, strategy)
