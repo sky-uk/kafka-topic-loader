@@ -1,5 +1,6 @@
 package base
 
+import java.time.Duration
 import java.util.UUID
 
 import akka.actor.ActorSystem
@@ -106,7 +107,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
     }
 
     def moveOffsetToEnd(topic: String): Unit =
-      withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(0))
+      withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(Duration.ZERO))
 
     def waitForCompaction(topic: String): Assertion =
       consumeEventually(topic) { r =>
@@ -141,7 +142,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
     final def consumeAllKafkaRecordsFromEarliestOffset(
         consumer: Consumer[String, String],
         polled: List[ConsumerRecord[String, String]] = List.empty): List[ConsumerRecord[String, String]] = {
-      val p = consumer.poll(500).iterator().asScala.toList
+      val p = consumer.poll(Duration.ofMillis(500)).iterator().asScala.toList
       if (p.isEmpty) polled else consumeAllKafkaRecordsFromEarliestOffset(consumer, polled ++ p)
     }
 
