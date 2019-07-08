@@ -92,7 +92,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
      */
     def publishToKafkaAndTriggerCompaction(topic: String, messages: Seq[(String, String)]): Unit = {
       val fillerSize = 20
-      val filler     = Stream.continually(UUID.randomUUID().toString).take(fillerSize).map(x => (x, x))
+      val filler     = List.fill(fillerSize)(UUID.randomUUID().toString).map(x => (x, x))
 
       publishToKafka(topic, messages)
       publishToKafka(topic, filler)
@@ -107,7 +107,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
     }
 
     def moveOffsetToEnd(topic: String): Unit =
-      withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(Duration.ZERO))
+      withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(Duration.ofSeconds(1)))
 
     def waitForCompaction(topic: String): Assertion =
       consumeEventually(topic) { r =>

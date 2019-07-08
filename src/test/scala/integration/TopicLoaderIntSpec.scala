@@ -158,6 +158,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
             |  fetch.max.wait.ms = 500
             |  session.timeout.ms = 500
             |  heartbeat.interval.ms = 300
+            |  default.api.timeout.ms = 1000
             |}
           """.stripMargin
           )
