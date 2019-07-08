@@ -36,8 +36,8 @@ val RefinedVersion = "0.9.5"
 // @formatter:off
 libraryDependencies ++= Seq(
   "com.typesafe.akka"           %% "akka-stream"              % AkkaVersion,
-  "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion,
   "com.typesafe.akka"           %% "akka-stream-kafka"        % "1.0.3",
+  "org.apache.kafka"             % "kafka-clients"            % "2.2.0",
   "com.typesafe.scala-logging"  %% "scala-logging"            % "3.9.2",
   "org.typelevel"               %% "cats-core"                % CatsVersion,
   "org.typelevel"               %% "cats-kernel"              % CatsVersion,
@@ -45,6 +45,7 @@ libraryDependencies ++= Seq(
   "eu.timepit"                  %% "refined-pureconfig"       % RefinedVersion,
   "com.sky"                     %% "akka-streams"             % "2.0.2",
   "com.github.pureconfig"       %% "pureconfig"               % "0.11.0",
+  "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test,
   "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,
   "org.scalatest"               %% "scalatest"                % "3.0.5"       % Test,
   "io.github.embeddedkafka"     %% "embedded-kafka"           % "2.2.0"       % Test

@@ -73,7 +73,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
       "cleanup.policy"            -> "compact",
       "delete.retention.ms"       -> "0",
       "min.cleanable.dirty.ratio" -> "0.01",
-      "segment.ms"                -> "10"
+      "segment.ms"                -> "1"
     )
 
     def records(r: Seq[Int]): Seq[(String, String)] = r.map(i => s"k$i" -> s"v$i")
