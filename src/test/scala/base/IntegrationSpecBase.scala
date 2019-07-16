@@ -1,5 +1,6 @@
 package base
 
+import java.time.Duration
 import java.util.UUID
 
 import akka.actor.ActorSystem
@@ -72,7 +73,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
       "cleanup.policy"            -> "compact",
       "delete.retention.ms"       -> "0",
       "min.cleanable.dirty.ratio" -> "0.01",
-      "segment.ms"                -> "10"
+      "segment.ms"                -> "1"
     )
 
     def records(r: Seq[Int]): Seq[(String, String)] = r.map(i => s"k$i" -> s"v$i")
@@ -91,7 +92,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
      */
     def publishToKafkaAndTriggerCompaction(topic: String, messages: Seq[(String, String)]): Unit = {
       val fillerSize = 20
-      val filler     = Stream.continually(UUID.randomUUID().toString).take(fillerSize).map(x => (x, x))
+      val filler     = List.fill(fillerSize)(UUID.randomUUID().toString).map(x => (x, x))
 
       publishToKafka(topic, messages)
       publishToKafka(topic, filler)
@@ -106,7 +107,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
     }
 
     def moveOffsetToEnd(topic: String): Unit =
-      withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(0))
+      withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(Duration.ofSeconds(1)))
 
     def waitForCompaction(topic: String): Assertion =
       consumeEventually(topic) { r =>
@@ -141,7 +142,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
     final def consumeAllKafkaRecordsFromEarliestOffset(
         consumer: Consumer[String, String],
         polled: List[ConsumerRecord[String, String]] = List.empty): List[ConsumerRecord[String, String]] = {
-      val p = consumer.poll(500).iterator().asScala.toList
+      val p = consumer.poll(Duration.ofMillis(500)).iterator().asScala.toList
       if (p.isEmpty) polled else consumeAllKafkaRecordsFromEarliestOffset(consumer, polled ++ p)
     }
 
