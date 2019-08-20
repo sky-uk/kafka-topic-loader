@@ -160,6 +160,7 @@ trait TopicLoader extends LazyLogging {
           .collect { case WithRecord(r) => r }
 
       kafkaSource[K, V](lowestOffsets, config)
+        .idleTimeout(config.idleTimeout)
         .via(filterBelowHighestOffset)
         .watchTermination() {
           case (mat, terminationF) =>
@@ -182,7 +183,6 @@ trait TopicLoader extends LazyLogging {
     Consumer
       .plainSource(settings, Subscriptions.assignmentWithOffset(startingOffsets))
       .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
-      .idleTimeout(config.idleTimeout)
       .map(cr => cr.bimap(_.deserialize[K](cr.topic), _.deserialize[V](cr.topic)))
 
   private def settings(implicit system: ActorSystem) =
