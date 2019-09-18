@@ -1,7 +1,7 @@
 language: scala
 
 scala:
-  - 2.12.2
+  - 2.12.8
 jdk:
   - oraclejdk8
 
@@ -10,7 +10,7 @@ branches:
   only:
     - master
 
-# http://www.scala-sbt.org/0.13/docs/Travis-CI-with-sbt.html
+# https://www.scala-sbt.org/1.x/docs/Travis-CI-with-sbt.html
 cache:
   directories:
     - $HOME/.ivy2/cache
