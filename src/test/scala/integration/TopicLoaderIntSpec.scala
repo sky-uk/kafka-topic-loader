@@ -230,13 +230,13 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         val ((callback, _), recordsProbe) =
           TopicLoader.loadAndRun[String, String](NonEmptyList.one(testTopic1)).toMat(TestSink.probe)(Keep.both).run()
 
-        recordsProbe.request(preLoad.size + postLoad.size)
-        recordsProbe.expectNextN(preLoad.size).map(recordToTuple) shouldBe preLoad
+        recordsProbe.request(preLoad.size.toLong + postLoad.size.toLong)
+        recordsProbe.expectNextN(preLoad.size.toLong).map(recordToTuple) shouldBe preLoad
 
         whenReady(callback) { _ =>
           publishToKafka(testTopic1, postLoad)
 
-          recordsProbe.expectNextN(postLoad.size).map(recordToTuple) shouldBe postLoad
+          recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
         }
       }
     }

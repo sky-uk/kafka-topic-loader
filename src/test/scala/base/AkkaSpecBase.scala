@@ -14,6 +14,6 @@ abstract class AkkaSpecBase extends TestKitBase with Suite with BeforeAndAfterAl
 
   override def afterAll(): Unit = {
     super.afterAll()
-    TestKit.shutdownActorSystem(system, 30 seconds, verifySystemShutdown = true)
+    TestKit.shutdownActorSystem(system, 30.seconds, verifySystemShutdown = true)
   }
 }

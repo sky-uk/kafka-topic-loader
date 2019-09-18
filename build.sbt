@@ -3,18 +3,31 @@ scalaVersion := "2.12.8"
 name := "kafka-topic-loader"
 
 scalacOptions ++= Seq(
-  "-encoding",
-  "UTF-8",
   "-deprecation",
-  "-unchecked",
-  "-Ywarn-dead-code",
-  "-Ywarn-unused",
-  "-Xfatal-warnings",
-  "-language:implicitConversions",
-  "-language:postfixOps",
-  "-target:jvm-1.8",
+  "-encoding",
+  "utf-8",
+  "-explaintypes",
   "-feature",
-  "-Ypartial-unification"
+  "-language:existentials",
+  "-language:higherKinds",
+  "-language:implicitConversions",
+  "-unchecked",
+  "-Xcheckinit",
+  "-Xfatal-warnings",
+  "-Xfuture",
+  "-Xlint",
+  "-Yno-adapted-args",
+  "-Ypartial-unification",
+  "-Ywarn-dead-code",
+  "-Ywarn-extra-implicit",
+  "-Ywarn-numeric-widen",
+  "-Ywarn-unused:implicits",
+  "-Ywarn-unused:imports",
+  "-Ywarn-unused:locals",
+  "-Ywarn-unused:params",
+  "-Ywarn-unused:patvars",
+  "-Ywarn-unused:privates",
+  "-Ywarn-value-discard"
 )
 
 scalafmtVersion := "1.5.1"
@@ -43,7 +56,6 @@ libraryDependencies ++= Seq(
   "org.typelevel"               %% "cats-kernel"              % CatsVersion,
   "eu.timepit"                  %% "refined"                  % RefinedVersion,
   "eu.timepit"                  %% "refined-pureconfig"       % RefinedVersion,
-  "com.sky"                     %% "akka-streams"             % "2.0.2",
   "com.github.pureconfig"       %% "pureconfig"               % "0.11.0",
   "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test,
   "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,

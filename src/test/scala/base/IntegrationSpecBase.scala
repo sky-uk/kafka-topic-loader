@@ -11,7 +11,7 @@ import cats.syntax.option._
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.CommonClientConfigs
-import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord}
+import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord, ConsumerRecords}
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.Assertion
@@ -27,7 +27,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
   override implicit val patienceConfig = PatienceConfig(20.seconds, 200.millis)
 
-  implicit val timeout = Timeout(5 seconds)
+  implicit val timeout = Timeout(5.seconds)
 
   trait TestContext extends AkkaSpecBase with EmbeddedKafka {
 
@@ -85,7 +85,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
     val testTopicPartitions = 5
 
     def createCustomTopics(topics: NonEmptyList[String], partitions: Int = testTopicPartitions): Unit =
-      topics.map(createCustomTopic(_, partitions = partitions))
+      topics.toList.foreach(createCustomTopic(_, partitions = partitions))
 
     /*
      * Note: Compaction is only triggered if messages are published as a separate statement.
@@ -101,12 +101,12 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
   trait KafkaConsumer { this: TestContext =>
 
-    def publishToKafkaAndWaitForCompaction(topic: String, messages: Seq[(String, String)]): Unit = {
+    def publishToKafkaAndWaitForCompaction(topic: String, messages: Seq[(String, String)]): Assertion = {
       publishToKafkaAndTriggerCompaction(topic, messages)
       waitForCompaction(testTopic1)
     }
 
-    def moveOffsetToEnd(topic: String): Unit =
+    def moveOffsetToEnd(topic: String): ConsumerRecords[String, String] =
       withAssignedConsumer(autoCommit = true, "latest", topic, None)(_.poll(Duration.ofSeconds(1)))
 
     def waitForCompaction(topic: String): Assertion =
