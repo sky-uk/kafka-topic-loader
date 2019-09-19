@@ -69,3 +69,4 @@ resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-release
 
 addCommandAlias("checkFmt", ";scalafmt::test; test:scalafmt::test; sbt:scalafmt::test")
 addCommandAlias("runFmt", ";scalafmt; test:scalafmt; sbt:scalafmt")
+addCommandAlias("ciBuild", ";checkFmt; clean; test")
