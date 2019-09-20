@@ -1,9 +1,9 @@
 language: scala
 
 scala:
-  - 2.12.8
+  - 2.12.10
 jdk:
-  - oraclejdk8
+  - openjdk12
 
 # Avoid triggering a duplicate build for PRs
 branches:

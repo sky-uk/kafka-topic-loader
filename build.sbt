@@ -1,5 +1,5 @@
 organization := "com.sky"
-scalaVersion := "2.12.8"
+scalaVersion := "2.12.10"
 name := "kafka-topic-loader"
 
 scalacOptions ++= Seq(
@@ -64,8 +64,7 @@ libraryDependencies ++= Seq(
 )
 // @formatter:on
 
-resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-releases/",
-                  "discovery-repo" at "http://artifacts.ath.bskyb.com/repository/discovery-repo")
+resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-releases/")
 
 addCommandAlias("checkFmt", ";scalafmt::test; test:scalafmt::test; sbt:scalafmt::test")
 addCommandAlias("runFmt", ";scalafmt; test:scalafmt; sbt:scalafmt")
