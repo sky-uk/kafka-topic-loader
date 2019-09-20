@@ -23,7 +23,7 @@ To compile and run tests: `sbt test`.
 
 1. Follow the [sbt-bintray publishing guidelines](https://github.com/sbt/sbt-bintray#publishing) to ensure you are
    authenticated with Bintray.  Note that you need to be a member of the `sky-uk` Bintray organization. 
-2. Run `sbt release` to perform the release of the zip/tgz binaries to Bintray.
+2. Run `sbt release` to perform the release of the binaries to Bintray.
 3. Check you are happy with the draft publication of the new version [here](https://bintray.com/sky-uk/oss-maven/kafka-topic-loader)
    and, if so, run `sbt bintrayRelease` to make the new version publicly accessible.
 
