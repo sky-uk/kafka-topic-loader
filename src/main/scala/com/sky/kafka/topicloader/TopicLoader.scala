@@ -77,7 +77,7 @@ trait TopicLoader extends LazyLogging {
       topics: NonEmptyList[String],
       strategy: LoadTopicStrategy
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
-    val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
+    val config = ConfigSource.fromConfig(system.settings.config).loadOrThrow[Config].topicLoader
     load(logOffsetsForTopics(topics, strategy), config)
   }
 
@@ -89,10 +89,10 @@ trait TopicLoader extends LazyLogging {
   def loadAndRun[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
-    val config      = loadConfigOrThrow[Config](system.settings.config).topicLoader
+    val config      = ConfigSource.fromConfig(system.settings.config).loadOrThrow[Config].topicLoader
     val logOffsetsF = logOffsetsForTopics(topics, LoadAll)
 
-    val postLoadingSource = Source.fromFutureSource(logOffsetsF.map { logOffsets =>
+    val postLoadingSource = Source.futureSource(logOffsetsF.map { logOffsets =>
       val highestOffsets = logOffsets.mapValues(_.highest)
       kafkaSource[K, V](highestOffsets, config)
     }(system.dispatcher))
@@ -121,7 +121,9 @@ trait TopicLoader extends LazyLogging {
       strategy: LoadTopicStrategy)(implicit system: ActorSystem): Future[Map[TopicPartition, LogOffsets]] = {
     def earliestOffsets(consumer: Consumer[Array[Byte], Array[Byte]],
                         beginningOffsets: Map[TopicPartition, Long]): Map[TopicPartition, Long] =
-      beginningOffsets.keys.map(p => p -> Option(consumer.committed(p)).fold(beginningOffsets(p))(_.offset)).toMap
+      beginningOffsets.map {
+        case (p, o) => p -> Option(consumer.committed(Set(p).asJava).get(p)).fold(o)(_.offset)
+      }
 
     import system.dispatcher
 
@@ -173,7 +175,7 @@ trait TopicLoader extends LazyLogging {
 
     import system.dispatcher
 
-    Source.fromFutureSource {
+    Source.futureSource {
       logOffsets.map(topicDataSource)
     }
   }
@@ -263,7 +265,7 @@ trait DeprecatedMethods { self: TopicLoader =>
       logOffsets: Future[Map[TopicPartition, LogOffsets]],
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T])(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
-    val config = loadConfigOrThrow[Config](system.settings.config).topicLoader
+    val config = ConfigSource.fromConfig(system.settings.config).loadOrThrow[Config].topicLoader
 
     import system.dispatcher
 
@@ -271,7 +273,7 @@ trait DeprecatedMethods { self: TopicLoader =>
       .mapMaterializedValue(_ => NotUsed)
       .mapAsync(config.parallelism.value)(r => onRecord(r).map(_ => r))
       .fold(logOffsets) { case (acc, _) => acc }
-      .flatMapConcat(Source.fromFuture)
+      .flatMapConcat(Source.future)
       .map(_.mapValues(_.highest))
   }
 }

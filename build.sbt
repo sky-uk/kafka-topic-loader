@@ -1,5 +1,8 @@
+val Scala212 = "2.12.10"
+val Scala213 = "2.13.2"
+
 organization := "com.sky"
-scalaVersion := "2.12.10"
+scalaVersion := "2.12.11"
 name := "kafka-topic-loader"
 
 scalacOptions ++= Seq(
@@ -42,25 +45,25 @@ bintrayRepository := "oss-maven"
 bintrayVcsUrl := Some("https://github.com/sky-uk/kafka-topic-loader")
 licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
-val AkkaVersion    = "2.5.23"
-val CatsVersion    = "1.6.0"
-val RefinedVersion = "0.9.5"
+val AkkaVersion    = "2.6.5"
+val CatsVersion    = "2.1.1"
+val RefinedVersion = "0.9.14"
 
 // @formatter:off
 libraryDependencies ++= Seq(
   "com.typesafe.akka"           %% "akka-stream"              % AkkaVersion,
-  "com.typesafe.akka"           %% "akka-stream-kafka"        % "1.0.3",
-  "org.apache.kafka"             % "kafka-clients"            % "2.2.0",
+  "com.typesafe.akka"           %% "akka-stream-kafka"        % "2.0.3",
+  "org.apache.kafka"             % "kafka-clients"            % "2.5.0",
   "com.typesafe.scala-logging"  %% "scala-logging"            % "3.9.2",
   "org.typelevel"               %% "cats-core"                % CatsVersion,
   "org.typelevel"               %% "cats-kernel"              % CatsVersion,
   "eu.timepit"                  %% "refined"                  % RefinedVersion,
   "eu.timepit"                  %% "refined-pureconfig"       % RefinedVersion,
-  "com.github.pureconfig"       %% "pureconfig"               % "0.11.0",
+  "com.github.pureconfig"       %% "pureconfig"               % "0.12.3",
   "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test,
   "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,
-  "org.scalatest"               %% "scalatest"                % "3.0.5"       % Test,
-  "io.github.embeddedkafka"     %% "embedded-kafka"           % "2.2.0"       % Test
+  "org.scalatest"               %% "scalatest"                % "3.1.2"       % Test,
+  "io.github.embeddedkafka"     %% "embedded-kafka"           % "2.5.0"       % Test
 )
 // @formatter:on
 
