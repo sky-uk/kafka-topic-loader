@@ -1,9 +1,8 @@
-val Scala212 = "2.12.10"
-val Scala213 = "2.13.2"
-
 organization := "com.sky"
-scalaVersion := "2.12.11"
+scalaVersion := "2.13.2"
 name := "kafka-topic-loader"
+
+crossScalaVersions := Seq("2.12.11", "2.13.2")
 
 scalacOptions ++= Seq(
   "-deprecation",
@@ -17,10 +16,7 @@ scalacOptions ++= Seq(
   "-unchecked",
   "-Xcheckinit",
   "-Xfatal-warnings",
-  "-Xfuture",
   "-Xlint",
-  "-Yno-adapted-args",
-  "-Ypartial-unification",
   "-Ywarn-dead-code",
   "-Ywarn-extra-implicit",
   "-Ywarn-numeric-widen",
@@ -31,7 +27,9 @@ scalacOptions ++= Seq(
   "-Ywarn-unused:patvars",
   "-Ywarn-unused:privates",
   "-Ywarn-value-discard"
-)
+) ++ {
+  if (scalaBinaryVersion.value == "2.13") Seq.empty else Seq("-Xfuture", "-Ypartial-unification", "-Yno-adapted-args")
+}
 
 scalafmtVersion := "1.5.1"
 scalafmtOnCompile := true
@@ -39,6 +37,7 @@ scalafmtOnCompile := true
 parallelExecution in Test := false
 fork in Test := true
 
+releaseCrossBuild := true
 bintrayOrganization := Some("sky-uk")
 bintrayReleaseOnPublish in ThisBuild := false
 bintrayRepository := "oss-maven"
@@ -71,4 +70,4 @@ resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-release
 
 addCommandAlias("checkFmt", ";scalafmt::test; test:scalafmt::test; sbt:scalafmt::test")
 addCommandAlias("runFmt", ";scalafmt; test:scalafmt; sbt:scalafmt")
-addCommandAlias("ciBuild", ";checkFmt; clean; test")
+addCommandAlias("ciBuild", ";checkFmt; clean; +test")

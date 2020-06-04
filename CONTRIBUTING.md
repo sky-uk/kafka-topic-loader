@@ -17,7 +17,8 @@ changes need some adjustment before they are ready for submission.
 
 The software is written in [Scala](https://scala-lang.org/) and is built with [SBT](http://www.scala-sbt.org/).
 
-To compile and run tests: `sbt test`.
+The project is built and released for Scala versions 2.12 and 2.13.
+To compile and test both versions run `sbt +test`.
 
 ## Performing a release (for project maintainers)
 
