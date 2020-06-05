@@ -28,7 +28,8 @@ scalacOptions ++= Seq(
   "-Ywarn-unused:privates",
   "-Ywarn-value-discard"
 ) ++ {
-  if (scalaBinaryVersion.value == "2.13") Seq.empty else Seq("-Xfuture", "-Ypartial-unification", "-Yno-adapted-args")
+  if (scalaBinaryVersion.value == "2.13") Seq("-Wconf:msg=annotation:silent")
+  else Seq("-Xfuture", "-Ypartial-unification", "-Yno-adapted-args")
 }
 
 scalafmtVersion := "1.5.1"
