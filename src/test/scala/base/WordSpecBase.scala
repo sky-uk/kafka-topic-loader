@@ -1,6 +1,7 @@
 package base
 
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{Matchers, WordSpec}
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 
-abstract class WordSpecBase extends WordSpec with Matchers with ScalaFutures
+abstract class WordSpecBase extends AnyWordSpec with Matchers with ScalaFutures

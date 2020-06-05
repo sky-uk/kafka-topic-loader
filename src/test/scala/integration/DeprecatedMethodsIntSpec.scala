@@ -121,7 +121,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
       (storeActor ? rec).mapTo[Int]
 
     def getRecords(implicit timeout: Timeout): Future[List[ConsumerRecord[String, String]]] =
-      (storeActor ? 'GET).mapTo[List[ConsumerRecord[String, String]]]
+      (storeActor ? Symbol("GET")).mapTo[List[ConsumerRecord[String, String]]]
 
     private class Store extends Actor {
       override def receive: Receive = store(List.empty)
@@ -131,7 +131,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
           val newRecs = records :+ r
           sender() ! newRecs.size
           context.become(store(newRecs))
-        case 'GET =>
+        case Symbol("GET") =>
           sender() ! records
       }
     }

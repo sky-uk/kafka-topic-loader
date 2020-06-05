@@ -19,10 +19,11 @@ import org.scalatest.concurrent.Eventually
 import net.manub.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import utils.RandomPort
 
-import scala.annotation.tailrec
+import scala.annotation.{nowarn, tailrec}
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
+@nowarn("msg=JavaConverters")
 abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
   override implicit val patienceConfig = PatienceConfig(20.seconds, 200.millis)

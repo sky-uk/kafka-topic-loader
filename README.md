@@ -3,9 +3,11 @@ Reads the contents of provided Kafka topics, either the topics in their entirety
 
 As of version `1.3.0`, data can be loaded either from complete topics using `load` or `loadAndRun`.
 
+Since version `1.3.3` the library is cross compiled for scala versions `2.12` and `2.13`.
+
 Add the following to your `build.sbt`:
 ```scala
-libraryDependencies += "com.sky" %% "kafka-topic-loader" % "1.3.0"
+libraryDependencies += "com.sky" %% "kafka-topic-loader" % "1.3.3"
 
 resolvers += "bintray-sky-uk-oss-maven" at "https://dl.bintray.com/sky-uk/oss-maven"
 ```
