@@ -8,7 +8,6 @@ import akka.kafka.ConsumerSettings
 import akka.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option._
-import com.sky.kafka.topicloader.CollectionConverters._
 import com.typesafe.config.ConfigFactory
 import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.CommonClientConfigs
@@ -20,9 +19,11 @@ import org.scalatest.concurrent.Eventually
 import net.manub.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import utils.RandomPort
 
-import scala.annotation.tailrec
+import scala.annotation.{nowarn, tailrec}
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
+@nowarn("msg=JavaConverters")
 abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
   override implicit val patienceConfig = PatienceConfig(20.seconds, 200.millis)
