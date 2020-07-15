@@ -1,13 +1,15 @@
 # kafka-topic-loader
+[ ![Download](https://api.bintray.com/packages/sky-uk/oss-maven/kafka-topic-loader/images/download.svg) ](https://bintray.com/sky-uk/oss-maven/kafka-topic-loader/_latestVersion)
+
 Reads the contents of provided Kafka topics, either the topics in their entirety or up until a consumer groups last committed Offset depending on which `LoadTopicStrategy` you provide.
 
 As of version `1.3.0`, data can be loaded either from complete topics using `load` or `loadAndRun`.
 
-Since version `1.3.3` the library is cross compiled for scala versions `2.12` and `2.13`.
+Since version `1.4.0` the library is cross compiled for scala versions `2.12` and `2.13`.
 
 Add the following to your `build.sbt`:
 ```scala
-libraryDependencies += "com.sky" %% "kafka-topic-loader" % "1.3.3"
+libraryDependencies += "com.sky" %% "kafka-topic-loader" % "<version>"
 
 resolvers += "bintray-sky-uk-oss-maven" at "https://dl.bintray.com/sky-uk/oss-maven"
 ```
