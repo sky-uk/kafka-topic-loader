@@ -7,7 +7,6 @@ target/
 .vscode/
 *.iml
 .metals/
-null/
 .bsp/
 
 # Scala
