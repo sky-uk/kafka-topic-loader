@@ -6,19 +6,29 @@ crossScalaVersions := Seq("2.12.14", "2.13.6")
 
 // format: off
 ThisBuild / scalacOptions ++= Seq(
-  "-encoding", "utf8",
   "-deprecation",
+  "-encoding", "utf8",
+  "-explaintypes",
   "-feature",
+  "-language:existentials",
+  "-language:higherKinds",
   "-unchecked",
-  "-Vtype-diffs",
-  "-Xlint:unused",
-  "-Ymacro-annotations",
-  "-Xsource:3",
-  "-Werror",
-  "-Wdead-code",
-  "-Wunused:patvars",
-  "-Wunused:params"
-)
+  "-Xcheckinit",
+  "-Xfatal-warnings",
+  "-Ywarn-dead-code",
+  "-Ywarn-extra-implicit",
+  "-Ywarn-numeric-widen",
+  "-Ywarn-unused:implicits",
+  "-Ywarn-unused:imports",
+  "-Ywarn-unused:locals",
+  "-Ywarn-unused:params",
+  "-Ywarn-unused:patvars",
+  "-Ywarn-unused:privates",
+  "-Ywarn-value-discard"
+) ++ {
+  if (scalaBinaryVersion.value == "2.13") Seq("-Wconf:msg=annotation:silent")
+  else Seq("-Xfuture", "-Ypartial-unification", "-Yno-adapted-args")
+}
 // format: on
 
 scalafmtVersion := "1.5.1"
