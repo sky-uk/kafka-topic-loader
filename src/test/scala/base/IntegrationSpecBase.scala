@@ -116,7 +116,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
       }
 
     def consumeEventually(topic: String, groupId: String = UUID.randomUUID().toString)(
-      f: List[(String, String)] => Assertion): Assertion =
+        f: List[(String, String)] => Assertion): Assertion =
       eventually {
         val records = withAssignedConsumer(autoCommit = false, offsetReset = "earliest", topic, groupId.some)(
           consumeAllKafkaRecordsFromEarliestOffset(_, List.empty))
@@ -140,8 +140,8 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
     @tailrec
     final def consumeAllKafkaRecordsFromEarliestOffset(
-                                                        consumer: Consumer[String, String],
-                                                        polled: List[ConsumerRecord[String, String]] = List.empty): List[ConsumerRecord[String, String]] = {
+        consumer: Consumer[String, String],
+        polled: List[ConsumerRecord[String, String]] = List.empty): List[ConsumerRecord[String, String]] = {
       val p = consumer.poll(Duration.ofMillis(500)).iterator().asScala.toList
       if (p.isEmpty) polled else consumeAllKafkaRecordsFromEarliestOffset(consumer, polled ++ p)
     }
