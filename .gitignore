@@ -4,8 +4,11 @@ target/
 
 # IDE
 .idea/
+.vscode/
 *.iml
 .metals/
+null/
+.bsp/
 
 # Scala
 *.class

@@ -9,21 +9,20 @@ import akka.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option._
 import com.typesafe.config.ConfigFactory
-import net.manub.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
+import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
+import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord, ConsumerRecords}
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.Assertion
 import org.scalatest.concurrent.Eventually
-import net.manub.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import utils.RandomPort
 
-import scala.annotation.{nowarn, tailrec}
-import scala.collection.JavaConverters._
-import scala.concurrent.duration._
+import scala.annotation.tailrec
+import scala.jdk.CollectionConverters._
+import scala.concurrent.duration.DurationInt
 
-@nowarn("msg=JavaConverters")
 abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
   override implicit val patienceConfig = PatienceConfig(20.seconds, 200.millis)
@@ -117,7 +116,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
       }
 
     def consumeEventually(topic: String, groupId: String = UUID.randomUUID().toString)(
-        f: List[(String, String)] => Assertion): Assertion =
+      f: List[(String, String)] => Assertion): Assertion =
       eventually {
         val records = withAssignedConsumer(autoCommit = false, offsetReset = "earliest", topic, groupId.some)(
           consumeAllKafkaRecordsFromEarliestOffset(_, List.empty))
@@ -141,8 +140,8 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
     @tailrec
     final def consumeAllKafkaRecordsFromEarliestOffset(
-        consumer: Consumer[String, String],
-        polled: List[ConsumerRecord[String, String]] = List.empty): List[ConsumerRecord[String, String]] = {
+                                                        consumer: Consumer[String, String],
+                                                        polled: List[ConsumerRecord[String, String]] = List.empty): List[ConsumerRecord[String, String]] = {
       val p = consumer.poll(Duration.ofMillis(500)).iterator().asScala.toList
       if (p.isEmpty) polled else consumeAllKafkaRecordsFromEarliestOffset(consumer, polled ++ p)
     }
