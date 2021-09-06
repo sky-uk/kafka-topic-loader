@@ -9,7 +9,7 @@ import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
-import net.manub.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
+import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException}
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
