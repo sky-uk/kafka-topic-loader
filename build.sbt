@@ -10,7 +10,6 @@ ThisBuild / scalacOptions ++= Seq(
   "-deprecation",
   "-feature",
   "-unchecked",
-  "-Vimplicits",
   "-Vtype-diffs",
   "-Xlint:unused",
   "-Ymacro-annotations",
