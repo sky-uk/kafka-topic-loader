@@ -73,7 +73,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
     }
 
     "fail when store record is unsuccessful" in new TestContext {
-      val exception = new Exception("boom!")
+      val exception                                                     = new Exception("boom!")
       val failingHandler: ConsumerRecord[String, String] => Future[Int] =
         _ => Future.failed(exception)
 
@@ -109,13 +109,13 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
           .runWith(Sink.ignore)
           .futureValue shouldBe Done
 
-        store.getRecords.futureValue.map(_.partition) should contain only (partitionsToRead.toList: _*)
+        store.getRecords.futureValue.map(_.partition).toSet should contain theSameElementsAs partitionsToRead.toList
       }
     }
   }
 
   class RecordStore()(implicit system: ActorSystem) {
-    private val storeActor = system.actorOf(Props(classOf[Store], RecordStore.this))
+    private val storeActor = system.actorOf(Props(classOf[Store]))
 
     def storeRecord(rec: ConsumerRecord[String, String])(implicit timeout: Timeout): Future[Int] =
       (storeActor ? rec).mapTo[Int]
@@ -131,7 +131,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
           val newRecs = records :+ r
           sender() ! newRecs.size
           context.become(store(newRecs))
-        case Symbol("GET") =>
+        case Symbol("GET")           =>
           sender() ! records
       }
     }

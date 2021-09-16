@@ -1,68 +1,85 @@
 organization := "com.sky"
-scalaVersion := "2.13.6"
-name := "kafka-topic-loader"
+scalaVersion := "3.0.2"
+name         := "kafka-topic-loader"
 
-crossScalaVersions := Seq("2.12.14", "2.13.6")
+crossScalaVersions := Seq("3.0.2")
 
 // format: off
-ThisBuild / scalacOptions ++= Seq(
-  "-deprecation",
-  "-encoding", "utf8",
-  "-explaintypes",
-  "-feature",
-  "-language:existentials",
-  "-language:higherKinds",
-  "-unchecked",
-  "-Xcheckinit",
-  "-Xfatal-warnings",
-  "-Ywarn-dead-code",
-  "-Ywarn-extra-implicit",
-  "-Ywarn-numeric-widen",
-  "-Ywarn-unused:implicits",
-  "-Ywarn-unused:imports",
-  "-Ywarn-unused:locals",
-  "-Ywarn-unused:params",
-  "-Ywarn-unused:patvars",
-  "-Ywarn-unused:privates",
-  "-Ywarn-value-discard"
-) ++ {
-  if (scalaBinaryVersion.value == "2.13") Seq("-Wconf:msg=annotation:silent")
-  else Seq("-Xfuture", "-Ypartial-unification", "-Yno-adapted-args")
+ThisBuild / scalacOptions ++= {
+  if (scalaBinaryVersion.value == "3") {
+    Seq(
+      "-deprecation",
+      "-encoding", "utf8",
+      "-feature",
+      "-unchecked",
+      "-Xfatal-warnings"
+    )
+  } else {
+    Seq(
+      "-deprecation",
+      "-encoding", "utf8",
+      "-explaintypes",
+      "-feature",
+      "-language:existentials",
+      "-language:higherKinds",
+      "-unchecked",
+      "-Xcheckinit",
+      "-Xfatal-warnings",
+      "-Ywarn-dead-code",
+      "-Ywarn-extra-implicit",
+      "-Ywarn-numeric-widen",
+      "-Ywarn-unused:implicits",
+      "-Ywarn-unused:imports",
+      "-Ywarn-unused:locals",
+      "-Ywarn-unused:params",
+      "-Ywarn-unused:patvars",
+      "-Ywarn-unused:privates",
+      "-Ywarn-value-discard"
+    ) ++ {
+      if (scalaBinaryVersion.value == "2.13") Seq("-Wconf:msg=annotation:silent")
+      else Seq("-Xfuture", "-Ypartial-unification", "-Yno-adapted-args")
+    }
+  }
 }
 // format: on
 
-scalafmtVersion := "1.5.1"
 scalafmtOnCompile := true
 
 Test / parallelExecution := false
-Test / fork := true
+Test / fork              := true
 
 releaseCrossBuild := true
 licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
-val AkkaVersion    = "2.6.16"
-val CatsVersion    = "2.6.1"
-val KafkaVersion   = "2.8.0"
-val RefinedVersion = "0.9.27"
+val AkkaVersion  = "2.6.16"
+val CatsVersion  = "2.6.1"
+val KafkaVersion = "2.8.0"
 
 // @formatter:off
 libraryDependencies ++= Seq(
-  "com.typesafe.akka"           %% "akka-stream"              % AkkaVersion,
-  "com.typesafe.akka"           %% "akka-stream-kafka"        % "2.1.1",
+  "com.typesafe.akka"           %% "akka-stream"              % AkkaVersion cross CrossVersion.for3Use2_13,
+  "com.typesafe.akka"           %% "akka-stream-kafka"        % "2.1.1" cross CrossVersion.for3Use2_13,
   "org.apache.kafka"             % "kafka-clients"            % KafkaVersion,
   "com.typesafe.scala-logging"  %% "scala-logging"            % "3.9.4",
   "org.typelevel"               %% "cats-core"                % CatsVersion,
   "org.typelevel"               %% "cats-kernel"              % CatsVersion,
-  "eu.timepit"                  %% "refined"                  % RefinedVersion,
-  "eu.timepit"                  %% "refined-pureconfig"       % RefinedVersion,
-  "com.github.pureconfig"       %% "pureconfig"               % "0.16.0",
+  "com.github.pureconfig"       %% "pureconfig-core"               % "0.16.0",
   "org.scala-lang.modules"      %% "scala-collection-compat"  % "2.5.0",
-  "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test,
-  "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,
+  "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test cross CrossVersion.for3Use2_13,
+  "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test cross CrossVersion.for3Use2_13,
   "org.scalatest"               %% "scalatest"                % "3.2.9"       % Test,
-  "io.github.embeddedkafka"     %% "embedded-kafka"           % KafkaVersion  % Test
+  "io.github.embeddedkafka"     %% "embedded-kafka"           % KafkaVersion  % Test cross CrossVersion.for3Use2_13
 )
 // @formatter:on
+
+excludeDependencies ++= {
+  if (scalaBinaryVersion.value == "3" )
+    Seq(
+      "com.typesafe.scala-logging" % "scala-logging_2.13",
+      "org.scala-lang.modules"     % "scala-collection-compat_2.13"
+    )
+  else Seq.empty
+}
 
 resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-releases/")
 

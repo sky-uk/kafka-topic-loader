@@ -59,7 +59,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       val strategy = LoadCommitted
 
       "stream all records up to the committed offset with LoadCommitted strategy" in new TestContext
-      with KafkaConsumer {
+        with KafkaConsumer {
         val topics                    = NonEmptyList.one(testTopic1)
         val (committed, notCommitted) = records(1 to 15).splitAt(10)
 
@@ -91,7 +91,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       }
 
       "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
-      with KafkaConsumer {
+        with KafkaConsumer {
         val published                 = records(1 to 10)
         val (notUpdated, toBeUpdated) = published.splitAt(5)
 

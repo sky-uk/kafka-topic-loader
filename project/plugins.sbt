@@ -1,2 +1,2 @@
 addSbtPlugin("com.github.gseitz" % "sbt-release"  % "1.0.10")
-addSbtPlugin("com.lucidchart"    % "sbt-scalafmt" % "1.16")
+addSbtPlugin("org.scalameta"     % "sbt-scalafmt" % "2.4.3")
