@@ -19,12 +19,11 @@ import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.serialization._
 import cats.syntax.bifunctor._
 import org.apache.kafka.common.TopicPartition
-import pureconfig._
+import pureconfig.ConfigSource
 import pureconfig.generic.auto._
 
-import scala.annotation.nowarn
 import scala.concurrent.Future
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 object TopicLoader extends TopicLoader with DeprecatedMethods {
   private[topicloader] case class LogOffsets(lowest: Long, highest: Long)
@@ -65,7 +64,6 @@ object TopicLoader extends TopicLoader with DeprecatedMethods {
     _.map(tp => s"${tp.topic}:${tp.partition}").mkString(", ")
 }
 
-@nowarn("msg=JavaConverters")
 trait TopicLoader extends LazyLogging {
 
   import TopicLoader._

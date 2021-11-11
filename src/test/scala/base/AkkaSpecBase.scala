@@ -5,7 +5,7 @@ import org.scalatest.{BeforeAndAfterAll, Suite}
 import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
+import scala.concurrent.duration.DurationInt
 
 abstract class AkkaSpecBase extends TestKitBase with Suite with BeforeAndAfterAll with Matchers {
 

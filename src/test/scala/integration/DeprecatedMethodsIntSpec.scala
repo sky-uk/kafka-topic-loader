@@ -8,11 +8,11 @@ import akka.util.Timeout
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.sky.kafka.topicloader._
-import net.manub.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
+import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.Future
 
 @deprecated("Remove when deprecated methods are gone", "")
@@ -20,7 +20,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
 
   "fromTopics" should {
     "execute onRecord for all messages in provided topics" in new TestContext {
-      val store                          = new RecordStore()
+      val store                          = new RecordStore
       val (recordsTopic1, recordsTopic2) = records(1 to 30).splitAt(15)
       val topics                         = NonEmptyList.of(testTopic1, testTopic2)
 

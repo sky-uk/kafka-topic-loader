@@ -4,8 +4,13 @@ target/
 
 # IDE
 .idea/
+.vscode/
 *.iml
 .metals/
+.bsp/
+project/metals.sbt
+project/project/
+.history/
 
 # Scala
 *.class
