@@ -47,7 +47,7 @@ licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
 val AkkaVersion    = "2.6.5"
 val CatsVersion    = "2.1.1"
-val RefinedVersion = "0.9.14"
+val RefinedVersion = "0.9.27"
 
 // @formatter:off
 libraryDependencies ++= Seq(
@@ -59,12 +59,12 @@ libraryDependencies ++= Seq(
   "org.typelevel"               %% "cats-kernel"              % CatsVersion,
   "eu.timepit"                  %% "refined"                  % RefinedVersion,
   "eu.timepit"                  %% "refined-pureconfig"       % RefinedVersion,
-  "com.github.pureconfig"       %% "pureconfig"               % "0.13.0",
+  "com.github.pureconfig"       %% "pureconfig"               % "0.17.0",
   "org.scala-lang.modules"      %% "scala-collection-compat"  % "2.1.6",
   "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test,
   "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,
   "org.scalatest"               %% "scalatest"                % "3.1.2"       % Test,
-  "io.github.embeddedkafka"     %% "embedded-kafka"           % "2.5.0"       % Test
+  "io.github.embeddedkafka"     %% "embedded-kafka"           % "2.7.0"       % Test
 )
 // @formatter:on
 
