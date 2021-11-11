@@ -64,7 +64,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test,
   "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,
   "org.scalatest"               %% "scalatest"                % "3.1.2"       % Test,
-  "io.github.embeddedkafka"     %% "embedded-kafka"           % "2.5.0"       % Test
+  "io.github.embeddedkafka"     %% "embedded-kafka"           % "2.7.0"       % Test
 )
 // @formatter:on
 
