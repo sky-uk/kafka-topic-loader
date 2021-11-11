@@ -1,8 +1,8 @@
 organization := "com.sky"
-scalaVersion := "2.13.6"
+scalaVersion := "2.13.7"
 name := "kafka-topic-loader"
 
-crossScalaVersions := Seq("2.12.14", "2.13.6")
+crossScalaVersions := Seq("2.12.15", "2.13.7")
 
 // format: off
 ThisBuild / scalacOptions ++= Seq(
