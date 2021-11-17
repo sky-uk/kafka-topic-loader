@@ -1,18 +1,21 @@
 package integration
 
 import java.util.concurrent.{TimeoutException => JavaTimeoutException}
-
 import akka.actor.ActorSystem
+import akka.kafka.ConsumerSettings
 import akka.stream.scaladsl.{Keep, Sink}
 import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
+import cats.syntax.option._
 import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException}
+import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
+import TopicLoader.consumerSettings
 
 import scala.concurrent.Future
 
@@ -239,6 +242,28 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
         }
       }
+    }
+  }
+
+  "consumerSettings" should {
+    implicit val system: ActorSystem = ActorSystem("test")
+
+    "use given ConsumerSettings when given some settings" in {
+      val testSettings: ConsumerSettings[Array[Byte], Array[Byte]] =
+        ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+          .withProperty("test", "testing")
+
+      val result: ConsumerSettings[Array[Byte], Array[Byte]] =
+        consumerSettings(testSettings.some)
+
+      result.properties("test") shouldBe "testing"
+    }
+
+    "use default ConsumerSettings if given None for maybeConsumerSettings" in {
+      val result: ConsumerSettings[Array[Byte], Array[Byte]] =
+        consumerSettings(None)
+
+      result.properties.get("test") shouldBe None
     }
   }
 
