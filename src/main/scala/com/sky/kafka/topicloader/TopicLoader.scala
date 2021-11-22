@@ -75,10 +75,11 @@ trait TopicLoader extends LazyLogging {
     */
   def load[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
-      strategy: LoadTopicStrategy
+      strategy: LoadTopicStrategy,
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
     val config = ConfigSource.fromConfig(system.settings.config).loadOrThrow[Config].topicLoader
-    load(logOffsetsForTopics(topics, strategy), config)
+    load(logOffsetsForTopics(topics, strategy), config, maybeConsumerSettings)
   }
 
   /**
@@ -88,16 +89,17 @@ trait TopicLoader extends LazyLogging {
     */
   def loadAndRun[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
     val config      = ConfigSource.fromConfig(system.settings.config).loadOrThrow[Config].topicLoader
     val logOffsetsF = logOffsetsForTopics(topics, LoadAll)
 
     val postLoadingSource = Source.futureSource(logOffsetsF.map { logOffsets =>
       val highestOffsets = logOffsets.map { case (p, o) => p -> o.highest }
-      kafkaSource[K, V](highestOffsets, config)
+      kafkaSource[K, V](highestOffsets, config, maybeConsumerSettings)
     }(system.dispatcher))
 
-    load[K, V](logOffsetsF, config)
+    load[K, V](logOffsetsF, config, maybeConsumerSettings)
       .watchTermination()(Keep.right)
       .concatMat(postLoadingSource)(Keep.both)
   }
@@ -128,7 +130,7 @@ trait TopicLoader extends LazyLogging {
     import system.dispatcher
 
     Future {
-      withStandaloneConsumer(settings) { c =>
+      withStandaloneConsumer(consumerSettings(None)) { c =>
         val offsets          = offsetsFrom(f(c)) _
         val beginningOffsets = offsets(c.beginningOffsets)
         val endOffsets = strategy match {
@@ -145,7 +147,8 @@ trait TopicLoader extends LazyLogging {
 
   protected def load[K : Deserializer, V : Deserializer](
       logOffsets: Future[Map[TopicPartition, LogOffsets]],
-      config: TopicLoaderConfig
+      config: TopicLoaderConfig,
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
 
     def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[ConsumerRecord[K, V], Consumer.Control] = {
@@ -162,7 +165,7 @@ trait TopicLoader extends LazyLogging {
           .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
           .collect { case WithRecord(r) => r }
 
-      kafkaSource[K, V](lowestOffsets, config)
+      kafkaSource[K, V](lowestOffsets, config, maybeConsumerSettings)
         .idleTimeout(config.idleTimeout)
         .via(filterBelowHighestOffset)
         .watchTermination() {
@@ -181,17 +184,23 @@ trait TopicLoader extends LazyLogging {
     }
   }
 
-  private def kafkaSource[K : Deserializer, V : Deserializer](startingOffsets: Map[TopicPartition, Long],
-                                                              config: TopicLoaderConfig)(implicit system: ActorSystem) =
+  private def kafkaSource[K : Deserializer, V : Deserializer](
+      startingOffsets: Map[TopicPartition, Long],
+      config: TopicLoaderConfig,
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]])(implicit system: ActorSystem) =
     Consumer
-      .plainSource(settings, Subscriptions.assignmentWithOffset(startingOffsets))
+      .plainSource(consumerSettings(maybeConsumerSettings), Subscriptions.assignmentWithOffset(startingOffsets))
       .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
       .map(cr => cr.bimap(_.deserialize[K](cr.topic), _.deserialize[V](cr.topic)))
 
-  private def settings(implicit system: ActorSystem) =
-    ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
-      .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-      .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+  def consumerSettings(
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
+  )(implicit system: ActorSystem): ConsumerSettings[Array[Byte], Array[Byte]] =
+    maybeConsumerSettings.getOrElse(
+      ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+        .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+        .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+    )
 
   private def withStandaloneConsumer[T](settings: ConsumerSettings[Array[Byte], Array[Byte]])(
       f: Consumer[Array[Byte], Array[Byte]] => T): T = {
@@ -270,7 +279,7 @@ trait DeprecatedMethods { self: TopicLoader =>
 
     import system.dispatcher
 
-    load(logOffsets, config)(keySerializer, valueDeserializer, system)
+    load(logOffsets, config, None)(keySerializer, valueDeserializer, system)
       .mapMaterializedValue(_ => NotUsed)
       .mapAsync(config.parallelism.value)(r => onRecord(r).map(_ => r))
       .fold(logOffsets) { case (acc, _) => acc }
