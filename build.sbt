@@ -59,7 +59,7 @@ libraryDependencies ++= Seq(
   "org.scala-lang.modules"      %% "scala-collection-compat"  % "2.5.0",
   "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test,
   "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,
-  "org.scalatest"               %% "scalatest"                % "3.2.9"       % Test,
+  "org.scalatest"               %% "scalatest"                % "3.2.10"       % Test,
   "io.github.embeddedkafka"     %% "embedded-kafka"           % KafkaVersion  % Test
 )
 // @formatter:on
