@@ -55,7 +55,7 @@ libraryDependencies ++= Seq(
   "org.typelevel"               %% "cats-kernel"              % CatsVersion,
   "eu.timepit"                  %% "refined"                  % RefinedVersion,
   "eu.timepit"                  %% "refined-pureconfig"       % RefinedVersion,
-  "com.github.pureconfig"       %% "pureconfig"               % "0.17.0",
+  "com.github.pureconfig"       %% "pureconfig"               % "0.17.1",
   "org.scala-lang.modules"      %% "scala-collection-compat"  % "2.5.0",
   "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test,
   "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,
