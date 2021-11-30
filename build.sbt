@@ -64,8 +64,6 @@ libraryDependencies ++= Seq(
 )
 // @formatter:on
 
-//resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-releases/")
-
 addCommandAlias("checkFmt", ";scalafmt::test; test:scalafmt::test; sbt:scalafmt::test")
 addCommandAlias("runFmt", ";scalafmt; test:scalafmt; sbt:scalafmt")
 addCommandAlias("ciBuild", ";checkFmt; clean; +test")
