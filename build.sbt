@@ -56,7 +56,7 @@ libraryDependencies ++= Seq(
   "eu.timepit"                  %% "refined"                  % RefinedVersion,
   "eu.timepit"                  %% "refined-pureconfig"       % RefinedVersion,
   "com.github.pureconfig"       %% "pureconfig"               % "0.17.0",
-  "org.scala-lang.modules"      %% "scala-collection-compat"  % "2.5.0",
+  "org.scala-lang.modules"      %% "scala-collection-compat"  % "2.6.0",
   "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test,
   "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,
   "org.scalatest"               %% "scalatest"                % "3.2.9"       % Test,
