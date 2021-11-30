@@ -1,4 +1,4 @@
-organization := "com.sky"
+organization := "uk.sky"
 scalaVersion := "2.13.7"
 name := "kafka-topic-loader"
 
