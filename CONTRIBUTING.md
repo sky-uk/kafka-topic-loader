@@ -61,7 +61,7 @@ The project is built and released for Scala versions 2.12 and 2.13. To compile a
 
 ### Releasing to Sonatype
 
-1. To release interactively, run `sbt release`. This will ask for the version to release, the next version, your PGP passphrase (for Sonatype)
+1. To release interactively, run `sbt release`. This will ask for the version to release, the next version, your GPG passphrase (for Sonatype)
 
 ## Contributor Code of Conduct
 
