@@ -42,7 +42,7 @@ licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
 val AkkaVersion    = "2.6.16"
 val CatsVersion    = "2.6.1"
-val KafkaVersion   = "2.8.0"
+val KafkaVersion   = "2.8.1"
 val RefinedVersion = "0.9.27"
 
 // @formatter:off
