@@ -31,14 +31,14 @@ ThisBuild / scalacOptions ++= Seq(
 }
 // format: on
 
+publishTo := sonatypePublishToBundle.value
+ThisBuild / sonatypeCredentialHost := "s01.oss.sonatype.org"
+
 scalafmtVersion := "1.5.1"
 scalafmtOnCompile := true
 
 Test / parallelExecution := false
 Test / fork := true
-
-releaseCrossBuild := true
-licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
 val AkkaVersion    = "2.6.16"
 val CatsVersion    = "2.6.1"
@@ -64,7 +64,7 @@ libraryDependencies ++= Seq(
 )
 // @formatter:on
 
-resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-releases/")
+//resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-releases/")
 
 addCommandAlias("checkFmt", ";scalafmt::test; test:scalafmt::test; sbt:scalafmt::test")
 addCommandAlias("runFmt", ";scalafmt; test:scalafmt; sbt:scalafmt")
