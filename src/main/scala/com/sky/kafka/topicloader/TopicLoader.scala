@@ -3,22 +3,22 @@ package com.sky.kafka.topicloader
 import java.lang.{Long => JLong}
 import java.util.{List => JList, Map => JMap}
 
-import akka.{Done, NotUsed}
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Flow, Keep, Source}
+import akka.{Done, NotUsed}
 import cats.data.NonEmptyList
+import cats.syntax.bifunctor._
 import cats.syntax.option._
 import cats.syntax.show._
 import cats.{Bifunctor, Show}
 import com.typesafe.scalalogging.LazyLogging
 import eu.timepit.refined.pureconfig._
 import org.apache.kafka.clients.consumer._
-import org.apache.kafka.common.serialization._
-import cats.syntax.bifunctor._
 import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.serialization._
 import pureconfig.ConfigSource
 import pureconfig.generic.auto._
 
@@ -33,7 +33,7 @@ object TopicLoader extends TopicLoader with DeprecatedMethods {
       consumerRecord: Option[ConsumerRecord[K, V]] = none[ConsumerRecord[K, V]]
   )
 
-  private implicit class DeserializerOps(val bytes: Array[Byte]) extends AnyVal {
+  private implicit class DeserializerOps(private val bytes: Array[Byte]) extends AnyVal {
     def deserialize[T](topic: String)(implicit ds: Deserializer[T]): T = ds.deserialize(topic, bytes)
   }
 

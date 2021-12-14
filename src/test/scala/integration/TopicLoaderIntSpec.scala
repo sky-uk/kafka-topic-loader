@@ -1,6 +1,7 @@
 package integration
 
 import java.util.concurrent.{TimeoutException => JavaTimeoutException}
+
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.stream.scaladsl.{Keep, Sink}
@@ -8,6 +9,7 @@ import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import cats.syntax.option._
+import com.sky.kafka.topicloader.TopicLoader.consumerSettings
 import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
@@ -15,7 +17,6 @@ import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
-import TopicLoader.consumerSettings
 
 import scala.concurrent.Future
 

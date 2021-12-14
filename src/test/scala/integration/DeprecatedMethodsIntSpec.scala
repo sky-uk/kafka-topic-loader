@@ -12,8 +12,8 @@ import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 
 @deprecated("Remove when deprecated methods are gone", "")
 class DeprecatedMethodsIntSpec extends IntegrationSpecBase {

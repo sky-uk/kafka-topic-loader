@@ -9,8 +9,8 @@ import akka.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option._
 import com.typesafe.config.ConfigFactory
-import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
+import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord, ConsumerRecords}
 import org.apache.kafka.clients.producer.ProducerConfig
@@ -20,8 +20,8 @@ import org.scalatest.concurrent.Eventually
 import utils.RandomPort
 
 import scala.annotation.tailrec
-import scala.jdk.CollectionConverters._
 import scala.concurrent.duration.DurationInt
+import scala.jdk.CollectionConverters._
 
 abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
