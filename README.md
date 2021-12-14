@@ -1,5 +1,6 @@
 # kafka-topic-loader
-[ ![Download](https://api.bintray.com/packages/sky-uk/oss-maven/kafka-topic-loader/images/download.svg) ](https://bintray.com/sky-uk/oss-maven/kafka-topic-loader/_latestVersion)
+
+[![Build Status](https://app.travis-ci.com/sky-uk/kafka-topic-loader.svg?branch=master)](https://app.travis-ci.com/sky-uk/kafka-topic-loader)
 
 Reads the contents of provided Kafka topics, either the topics in their entirety or up until a consumer groups last committed Offset depending on which `LoadTopicStrategy` you provide.
 
@@ -8,6 +9,7 @@ As of version `1.3.0`, data can be loaded either from complete topics using `loa
 Since version `1.4.0` the library is cross compiled for scala versions `2.12` and `2.13`.
 
 Add the following to your `build.sbt`:
+
 ```scala
 libraryDependencies += "com.sky" %% "kafka-topic-loader" % "<version>"
 
@@ -26,8 +28,8 @@ val stream = TopicLoader.load[String, String](NonEmptyList.one("topic-to-load"),
       .runWith(Sink.ignore)
 ```
 
-`loadAndRun` will load the topics, complete the `Future[Done]` from the materialised value and then carry on 
-running, emitting any new records that appear on the topics. An example use-case for this is a REST API that holds the 
+`loadAndRun` will load the topics, complete the `Future[Done]` from the materialised value and then carry on
+running, emitting any new records that appear on the topics. An example use-case for this is a REST API that holds the
 contents of a Kafka topic in memory. This kind of application doesn't need to commit offsets and can use the `Future[Done]` to determine readiness.
 
 ```scala
@@ -64,13 +66,14 @@ class SimplifiedState {
     */
   val isAppReady = new AtomicBoolean()
 }
-``` 
+```
 
 ## Configuring your consumer group.id
 
 You should configure the `akka.kafka.consumer.kafka-clients.group.id` to match that of your application.
 
 e.g
+
 ```
 akka.kafka {
   consumer.kafka-clients {
@@ -87,7 +90,7 @@ akka.kafka {
 
 This is deprecated in favour of a new API for partitioned loading which is coming soon.
 
-Data can also be loaded from specific partitions using `fromPartitions`. By loading from specific partitions the topic 
+Data can also be loaded from specific partitions using `fromPartitions`. By loading from specific partitions the topic
 loader can be used by multiple application instances with separate streams per set of partitions (see [Alpakka kafka](https://doc.akka.io/docs/akka-stream-kafka/current/consumer.html#source-per-partition) and below).
 
 ```scala
