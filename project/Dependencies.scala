@@ -30,6 +30,7 @@ object Dependencies {
 
   val kafkaClients          = "org.apache.kafka"            % "kafka-clients"           % KafkaVersion
   val scalaLogging          = "com.typesafe.scala-logging" %% "scala-logging"           % "3.9.4"
+  val logbackClassic        = "ch.qos.logback"              % "logback-classic"         % "1.2.8" % Runtime
   val pureconfig            = "com.github.pureconfig"      %% "pureconfig"              % "0.17.0"
   val scalaCollectionCompat = "org.scala-lang.modules"     %% "scala-collection-compat" % "2.5.0"
 
@@ -39,6 +40,7 @@ object Dependencies {
   val core = Akka.base ++ Cats.all ++ Refined.all ++ Seq(
     kafkaClients,
     scalaLogging,
+    logbackClassic,
     pureconfig,
     scalaCollectionCompat
   )
