@@ -73,7 +73,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
     }
 
     "fail when store record is unsuccessful" in new TestContext {
-      val exception = new Exception("boom!")
+      val exception                                                     = new Exception("boom!")
       val failingHandler: ConsumerRecord[String, String] => Future[Int] =
         _ => Future.failed(exception)
 
@@ -131,7 +131,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
           val newRecs = records :+ r
           sender() ! newRecs.size
           context.become(store(newRecs))
-        case Symbol("GET") =>
+        case Symbol("GET")           =>
           sender() ! records
       }
     }
