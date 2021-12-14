@@ -52,8 +52,6 @@ licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
 libraryDependencies ++= all
 
-resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-releases/")
-
 addCommandAlias("checkFix", "scalafixAll --check OrganizeImports; scalafixAll --check")
 addCommandAlias("runFix", "scalafixAll OrganizeImports; scalafixAll")
 addCommandAlias("checkFmt", "scalafmtCheckAll; scalafmtSbtCheck")
