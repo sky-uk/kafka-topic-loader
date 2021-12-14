@@ -9,7 +9,10 @@ name         := "kafka-topic-loader"
 
 scalaVersion       := scala213
 crossScalaVersions := supportedScalaVersions
+semanticdbEnabled  := true
+semanticdbVersion  := scalafixSemanticdb.revision
 
+ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.6.0"
 // format: off
 ThisBuild / scalacOptions ++= Seq(
   "-deprecation",
@@ -37,9 +40,12 @@ ThisBuild / scalacOptions ++= Seq(
 }
 // format: on
 
-Test / parallelExecution := false
-Test / fork              := true
-releaseCrossBuild        := true
+Test / parallelExecution                                   := false
+Test / fork                                                := true
+
+Global / onChangedBuildSource := ReloadOnSourceChanges
+
+releaseCrossBuild := true
 
 licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
@@ -47,6 +53,9 @@ libraryDependencies ++= all
 
 resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-releases/")
 
-addCommandAlias("checkFmt", ";scalafmt::test; test:scalafmt::test; sbt:scalafmt::test")
-addCommandAlias("runFmt", ";scalafmt; test:scalafmt; sbt:scalafmt")
+addCommandAlias("checkFix", "scalafixAll --check OrganizeImports; scalafixAll --check")
+addCommandAlias("runFix", "scalafixAll OrganizeImports; scalafixAll")
+addCommandAlias("checkFmt", "scalafmtCheckAll; scalafmtSbtCheck")
+addCommandAlias("runFmt", "scalafmtAll; scalafmtSbt")
+
 addCommandAlias("ciBuild", ";checkFmt; clean; +test")
