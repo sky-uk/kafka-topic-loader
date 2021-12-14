@@ -12,7 +12,6 @@ crossScalaVersions := supportedScalaVersions
 semanticdbEnabled  := true
 semanticdbVersion  := scalafixSemanticdb.revision
 
-ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.6.0"
 // format: off
 ThisBuild / scalacOptions ++= Seq(
   "-deprecation",
@@ -40,8 +39,10 @@ ThisBuild / scalacOptions ++= Seq(
 }
 // format: on
 
-Test / parallelExecution                                   := false
-Test / fork                                                := true
+ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.6.0"
+
+Test / parallelExecution := false
+Test / fork              := true
 
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
