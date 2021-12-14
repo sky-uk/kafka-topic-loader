@@ -12,8 +12,6 @@ Add the following to your `build.sbt`:
 
 ```scala
 libraryDependencies += "com.sky" %% "kafka-topic-loader" % "<version>"
-
-resolvers += "bintray-sky-uk-oss-maven" at "https://dl.bintray.com/sky-uk/oss-maven"
 ```
 
 ```scala
