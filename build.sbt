@@ -40,7 +40,7 @@ Test / fork := true
 releaseCrossBuild := true
 licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
-val AkkaVersion    = "2.6.16"
+val AkkaVersion    = "2.6.18"
 val CatsVersion    = "2.6.1"
 val KafkaVersion   = "2.8.0"
 val RefinedVersion = "0.9.27"
