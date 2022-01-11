@@ -1,8 +1,16 @@
-organization := "com.sky"
-scalaVersion := "2.13.7"
-name := "kafka-topic-loader"
+import Dependencies.all
 
-crossScalaVersions := Seq("2.12.15", "2.13.7")
+lazy val scala213               = "2.13.7"
+lazy val scala212               = "2.12.15"
+lazy val supportedScalaVersions = List(scala213, scala212)
+
+organization := "com.sky"
+name         := "kafka-topic-loader"
+
+scalaVersion       := scala213
+crossScalaVersions := supportedScalaVersions
+semanticdbEnabled  := true
+semanticdbVersion  := scalafixSemanticdb.revision
 
 // format: off
 ThisBuild / scalacOptions ++= Seq(
@@ -31,41 +39,22 @@ ThisBuild / scalacOptions ++= Seq(
 }
 // format: on
 
-scalafmtVersion := "1.5.1"
-scalafmtOnCompile := true
+ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.6.0"
 
 Test / parallelExecution := false
-Test / fork := true
+Test / fork              := true
+
+Global / onChangedBuildSource := ReloadOnSourceChanges
 
 releaseCrossBuild := true
+
 licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
-val AkkaVersion    = "2.6.18"
-val CatsVersion    = "2.6.1"
-val KafkaVersion   = "2.8.0"
-val RefinedVersion = "0.9.27"
+libraryDependencies ++= all
 
-// @formatter:off
-libraryDependencies ++= Seq(
-  "com.typesafe.akka"           %% "akka-stream"              % AkkaVersion,
-  "com.typesafe.akka"           %% "akka-stream-kafka"        % "2.1.1",
-  "org.apache.kafka"             % "kafka-clients"            % KafkaVersion,
-  "com.typesafe.scala-logging"  %% "scala-logging"            % "3.9.4",
-  "org.typelevel"               %% "cats-core"                % CatsVersion,
-  "org.typelevel"               %% "cats-kernel"              % CatsVersion,
-  "eu.timepit"                  %% "refined"                  % RefinedVersion,
-  "eu.timepit"                  %% "refined-pureconfig"       % RefinedVersion,
-  "com.github.pureconfig"       %% "pureconfig"               % "0.17.0",
-  "org.scala-lang.modules"      %% "scala-collection-compat"  % "2.5.0",
-  "com.typesafe.akka"           %% "akka-stream-testkit"      % AkkaVersion   % Test,
-  "com.typesafe.akka"           %% "akka-testkit"             % AkkaVersion   % Test,
-  "org.scalatest"               %% "scalatest"                % "3.2.9"       % Test,
-  "io.github.embeddedkafka"     %% "embedded-kafka"           % KafkaVersion  % Test
-)
-// @formatter:on
+addCommandAlias("checkFix", "scalafixAll --check OrganizeImports; scalafixAll --check")
+addCommandAlias("runFix", "scalafixAll OrganizeImports; scalafixAll")
+addCommandAlias("checkFmt", "scalafmtCheckAll; scalafmtSbtCheck")
+addCommandAlias("runFmt", "scalafmtAll; scalafmtSbt")
 
-resolvers ++= Seq("segence" at "https://dl.bintray.com/segence/maven-oss-releases/")
-
-addCommandAlias("checkFmt", ";scalafmt::test; test:scalafmt::test; sbt:scalafmt::test")
-addCommandAlias("runFmt", ";scalafmt; test:scalafmt; sbt:scalafmt")
-addCommandAlias("ciBuild", ";checkFmt; clean; +test")
+addCommandAlias("ciBuild", "checkFmt; checkFix; +test")

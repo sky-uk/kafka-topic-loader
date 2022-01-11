@@ -12,8 +12,8 @@ import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 
 @deprecated("Remove when deprecated methods are gone", "")
 class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
@@ -73,7 +73,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
     }
 
     "fail when store record is unsuccessful" in new TestContext {
-      val exception = new Exception("boom!")
+      val exception                                                     = new Exception("boom!")
       val failingHandler: ConsumerRecord[String, String] => Future[Int] =
         _ => Future.failed(exception)
 
@@ -131,7 +131,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
           val newRecs = records :+ r
           sender() ! newRecs.size
           context.become(store(newRecs))
-        case Symbol("GET") =>
+        case Symbol("GET")           =>
           sender() ! records
       }
     }
