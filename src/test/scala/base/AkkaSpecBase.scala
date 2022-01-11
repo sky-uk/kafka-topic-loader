@@ -1,8 +1,8 @@
 package base
 
 import akka.testkit.{TestKit, TestKitBase}
-import org.scalatest.{BeforeAndAfterAll, Suite}
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.{BeforeAndAfterAll, Suite}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.DurationInt
