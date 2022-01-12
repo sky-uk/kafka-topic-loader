@@ -32,7 +32,7 @@ object Dependencies {
   val pureconfig            = "com.github.pureconfig"      %% "pureconfig"              % "0.17.0"
   val scalaCollectionCompat = "org.scala-lang.modules"     %% "scala-collection-compat" % "2.5.0"
 
-  val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "2.8.0" % Test
+  val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "2.8.1" % Test
   val scalaTest     = "org.scalatest"           %% "scalatest"      % "3.2.9" % Test
 
   val core = Akka.base ++ Cats.all ++ Refined.all ++ Seq(
