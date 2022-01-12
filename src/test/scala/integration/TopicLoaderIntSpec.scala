@@ -1,6 +1,7 @@
 package integration
 
 import java.util.concurrent.{TimeoutException => JavaTimeoutException}
+
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.stream.scaladsl.{Keep, Sink}
@@ -8,6 +9,7 @@ import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import cats.syntax.option._
+import com.sky.kafka.topicloader.TopicLoader.consumerSettings
 import com.sky.kafka.topicloader._
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
@@ -15,7 +17,6 @@ import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
-import TopicLoader.consumerSettings
 
 import scala.concurrent.Future
 
@@ -62,7 +63,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       val strategy = LoadCommitted
 
       "stream all records up to the committed offset with LoadCommitted strategy" in new TestContext
-      with KafkaConsumer {
+        with KafkaConsumer {
         val topics                    = NonEmptyList.one(testTopic1)
         val (committed, notCommitted) = records(1 to 15).splitAt(10)
 
@@ -94,7 +95,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       }
 
       "work when highest offset is missing in log and there are messages after highest offset" in new TestContext
-      with KafkaConsumer {
+        with KafkaConsumer {
         val published                 = records(1 to 10)
         val (notUpdated, toBeUpdated) = published.splitAt(5)
 
