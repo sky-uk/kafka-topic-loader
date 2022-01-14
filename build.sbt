@@ -4,8 +4,20 @@ lazy val scala213               = "2.13.7"
 lazy val scala212               = "2.12.15"
 lazy val supportedScalaVersions = List(scala213, scala212)
 
-organization := "com.sky"
-name         := "kafka-topic-loader"
+name                   := "kafka-topic-loader"
+organization           := "uk.sky"
+sonatypeCredentialHost := "s01.oss.sonatype.org"
+sonatypeRepository     := "https://s01.oss.sonatype.org/service/local"
+homepage               := Some(url("https://github.com/sky-uk/kafka-topic-loader"))
+licenses               := List("BSD New" -> url("https://opensource.org/licenses/BSD-3-Clause"))
+developers             := List(
+  Developer(
+    "BiBCD",
+    "BiBCD",
+    "bibcd-jenkins-github-user@skyglobal.onmicrosoft.com",
+    url("https://github.com/sky-uk/kafka-topic-loader")
+  )
+)
 
 scalaVersion       := scala213
 crossScalaVersions := supportedScalaVersions
@@ -45,10 +57,6 @@ Test / parallelExecution := false
 Test / fork              := true
 
 Global / onChangedBuildSource := ReloadOnSourceChanges
-
-releaseCrossBuild := true
-
-licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
 libraryDependencies ++= all
 
