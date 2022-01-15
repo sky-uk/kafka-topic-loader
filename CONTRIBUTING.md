@@ -18,56 +18,20 @@ The project is built and released for Scala versions 2.12 and 2.13. To compile a
 
 ## Performing a release (for project maintainers)
 
-1. Follow the [sbt-bintray publishing guidelines](https://github.com/sbt/sbt-bintray#publishing) to ensure you are authenticated with Bintray. Note that you need to be a member of the `sky-uk` Bintray organization.
-2. Run `sbt release` to perform the release of the binaries to Bintray.
-3. Check you are happy with the draft publication of the new version [here](https://bintray.com/sky-uk/oss-maven/kafka-topic-loader) and, if so, run `sbt bintrayRelease` to make the new version publicly accessible.
+Merging a PR to master will create a snapshot release in the [Sonatype snapshot repository](https://s01.oss.sonatype.org/content/repositories/snapshots/uk/sky/).
 
----
+To create a new stable release, you must tag the head of master and push it to Github.
 
-### Generate a GPG key
+```bash
+git checkout master
+git pull origin master
+git tag -a v$VERSION -m "v$VERSION"
+git push origin v$VERSION
+```
 
-1. Generate a GPG key:
+> 💡 The tag **must** start with a `v` followed by the version, e.g. `v1.0.0`
 
-   ```bash
-   $ gpg --full-generate-key
-   ```
-
-2. Kind: `RSA and RSA`
-3. Key size: `4096`
-4. Expiry: `2y`
-5. Enter your name, email, comment and passphrase
-
-### Distribute your GPG key
-
-1. Get your public key:
-
-   ```bash
-   $ gpg --list-keys
-
-   pub   rsa4096 2021-11-30 [SC] [expires: 2023-11-30]
-      CA925CD6C9E8D064FF05B4728190C4130ABA0F98
-   ```
-
-2. Send your GPG key:
-
-   ```bash
-   $ gpg --keyserver keyserver.ubuntu.com --send-keys CA925CD6C9E8D064FF05B4728190C4130ABA0F98
-   ```
-
-### Signing the release
-
-1. Create a file at `~/.sbt/1.0/sonatype.sbt`
-
-   ```sbt
-   credentials += Credentials("Sonatype Nexus Repository Manager",
-        "oss.sonatype.org",
-        "(Sonatype user name)",
-        "(Sonatype password)")
-   ```
-
-### Releasing to Sonatype
-
-1. To release interactively, run `sbt release`. This will ask for the version to release, the next version, your PGP passphrase (for Sonatype)
+This will trigger the `release` stage of the [travis workflow](./.travis.yml), and push the image to the [Sonatype release repository](https://s01.oss.sonatype.org/content/repositories/releases/uk/sky/).
 
 ## Contributor Code of Conduct
 
