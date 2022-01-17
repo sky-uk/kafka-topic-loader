@@ -12,9 +12,9 @@ homepage               := Some(url("https://github.com/sky-uk/kafka-topic-loader
 licenses               := List("BSD New" -> url("https://opensource.org/licenses/BSD-3-Clause"))
 developers             := List(
   Developer(
-    "BiBCD",
-    "BiBCD",
-    "bibcd-jenkins-github-user@skyglobal.onmicrosoft.com",
+    "Sky UK OSS",
+    "Sky UK OSS",
+    sys.env.getOrElse("SONATYPE_EMAIL", "https://github.com/sky-uk/kafka-topic-loader"),
     url("https://github.com/sky-uk/kafka-topic-loader")
   )
 )
