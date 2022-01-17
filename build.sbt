@@ -3,9 +3,22 @@ import Dependencies.all
 lazy val scala213               = "2.13.7"
 lazy val scala212               = "2.12.15"
 lazy val supportedScalaVersions = List(scala213, scala212)
+lazy val scmUrl                 = "https://github.com/sky-uk/kafka-topic-loader"
 
-organization := "com.sky"
-name         := "kafka-topic-loader"
+name                   := "kafka-topic-loader"
+organization           := "uk.sky"
+sonatypeCredentialHost := "s01.oss.sonatype.org"
+sonatypeRepository     := "https://s01.oss.sonatype.org/service/local"
+homepage               := Some(url(scmUrl))
+licenses               := List("BSD New" -> url("https://opensource.org/licenses/BSD-3-Clause"))
+developers             := List(
+  Developer(
+    "Sky UK OSS",
+    "Sky UK OSS",
+    sys.env.getOrElse("SONATYPE_EMAIL", scmUrl),
+    url(scmUrl)
+  )
+)
 
 scalaVersion       := scala213
 crossScalaVersions := supportedScalaVersions
@@ -45,10 +58,6 @@ Test / parallelExecution := false
 Test / fork              := true
 
 Global / onChangedBuildSource := ReloadOnSourceChanges
-
-releaseCrossBuild := true
-
-licenses += ("BSD New", url("https://opensource.org/licenses/BSD-3-Clause"))
 
 libraryDependencies ++= all
 
