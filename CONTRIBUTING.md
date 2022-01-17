@@ -18,11 +18,19 @@ The project is built and released for Scala versions 2.12 and 2.13. To compile a
 
 ## Performing a release (for project maintainers)
 
-Merging a PR to master will create a snapshot release in the [Sonatype snapshot repository](https://s01.oss.sonatype.org/content/repositories/snapshots/uk/sky/).
+### Snapshot release
 
-To create a new stable release, create a GitHub release with the new version. This will trigger the `release` stage of the [travis workflow](./.travis.yml), and push the image to the [Sonatype release repository](https://s01.oss.sonatype.org/content/repositories/releases/uk/sky/).
+1. Merging a PR to master will trigger the `release` step of the [travis workflow](./.travis.yml) and create a snapshot release in the [Sonatype snapshot repository](https://s01.oss.sonatype.org/content/repositories/snapshots/uk/sky/).
 
-> 💡 The release tag **must** start with a `v` followed by the version, e.g. `v1.0.0`
+> the `sbt-ci-release` plugin detects it is a snapshot release uses [sbt-dynver](https://github.com/dwijnand/sbt-dynver) versioning.
+
+### Stable release
+
+1. Create a GitHub release with the new version and tag following [semver.org](https://semver.org/).
+2. Update the release notes according to recent changes. You can click 'Auto-generate release notes' when creating the release.
+3. Publish the release. This will trigger the `release` stage of the [travis workflow](./.travis.yml) and push the image to the [Sonatype release repository](https://s01.oss.sonatype.org/content/repositories/releases/uk/sky/).
+
+> 💡 The release tag **must** start with a `v` followed by the version, e.g. `v1.0.0` for sbt-ci-release to work
 
 ## Contributor Code of Conduct
 
