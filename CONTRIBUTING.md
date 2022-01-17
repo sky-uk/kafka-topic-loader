@@ -20,18 +20,9 @@ The project is built and released for Scala versions 2.12 and 2.13. To compile a
 
 Merging a PR to master will create a snapshot release in the [Sonatype snapshot repository](https://s01.oss.sonatype.org/content/repositories/snapshots/uk/sky/).
 
-To create a new stable release, you must tag the head of master and push it to Github.
+To create a new stable release, create a GitHub release with the new version. This will trigger the `release` stage of the [travis workflow](./.travis.yml), and push the image to the [Sonatype release repository](https://s01.oss.sonatype.org/content/repositories/releases/uk/sky/).
 
-```bash
-git checkout master
-git pull origin master
-git tag -a v$VERSION -m "v$VERSION"
-git push origin v$VERSION
-```
-
-> 💡 The tag **must** start with a `v` followed by the version, e.g. `v1.0.0`
-
-This will trigger the `release` stage of the [travis workflow](./.travis.yml), and push the image to the [Sonatype release repository](https://s01.oss.sonatype.org/content/repositories/releases/uk/sky/).
+> 💡 The release tag **must** start with a `v` followed by the version, e.g. `v1.0.0`
 
 ## Contributor Code of Conduct
 
