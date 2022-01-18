@@ -29,7 +29,7 @@ object Dependencies {
   val kafkaClients          = "org.apache.kafka"            % "kafka-clients"           % "2.8.0"
   val scalaLogging          = "com.typesafe.scala-logging" %% "scala-logging"           % "3.9.4"
   val logbackClassic        = "ch.qos.logback"              % "logback-classic"         % "1.2.10" % Runtime
-  val pureconfig            = "com.github.pureconfig"      %% "pureconfig"              % "0.17.0"
+  val pureconfig            = "com.github.pureconfig"      %% "pureconfig"              % "0.17.1"
   val scalaCollectionCompat = "org.scala-lang.modules"     %% "scala-collection-compat" % "2.5.0"
 
   val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "2.8.0" % Test
