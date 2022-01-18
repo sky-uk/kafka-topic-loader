@@ -1,6 +1,8 @@
 # kafka-topic-loader
 
 [![Build Status](https://app.travis-ci.com/sky-uk/kafka-topic-loader.svg?branch=master)](https://app.travis-ci.com/sky-uk/kafka-topic-loader)
+[![Maven Central](https://img.shields.io/maven-central/v/uk.sky/kafka-topic-loader_2.13?color=orange)](https://mvnrepository.com/artifact/uk.sky/kafka-topic-loader)
+[![Sonatype Nexus (Snapshots)](https://img.shields.io/nexus/s/uk.sky/kafka-topic-loader_2.13?label=snapshot&server=https%3A%2F%2Fs01.oss.sonatype.org)](https://s01.oss.sonatype.org/content/repositories/snapshots/uk/sky/kafka-topic-loader_2.13/)
 
 Reads the contents of provided Kafka topics, either the topics in their entirety or up until a consumer groups last committed Offset depending on which `LoadTopicStrategy` you provide.
 
@@ -11,7 +13,7 @@ Since version `1.4.0` the library is cross compiled for scala versions `2.12` an
 Add the following to your `build.sbt`:
 
 ```scala
-libraryDependencies += "com.sky" %% "kafka-topic-loader" % "<version>"
+libraryDependencies += "uk.sky" %% "kafka-topic-loader" % "<version>"
 ```
 
 ```scala
