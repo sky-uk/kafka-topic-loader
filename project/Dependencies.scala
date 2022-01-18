@@ -13,7 +13,7 @@ object Dependencies {
   }
 
   object Cats {
-    private val version = "2.6.1"
+    private val version = "2.7.0"
     val core            = "org.typelevel" %% "cats-core"   % version
     val kernal          = "org.typelevel" %% "cats-kernel" % version
     val all             = Seq(core, kernal)
