@@ -13,27 +13,27 @@ object Dependencies {
   }
 
   object Cats {
-    private val version = "2.6.1"
+    private val version = "2.7.0"
     val core            = "org.typelevel" %% "cats-core"   % version
     val kernal          = "org.typelevel" %% "cats-kernel" % version
     val all             = Seq(core, kernal)
   }
 
   object Refined {
-    private val version = "0.9.27"
+    private val version = "0.9.28"
     val base            = "eu.timepit" %% "refined"            % version
     val pureconfig      = "eu.timepit" %% "refined-pureconfig" % version
     val all             = Seq(base, pureconfig)
   }
 
-  val kafkaClients          = "org.apache.kafka"            % "kafka-clients"           % "2.8.0"
+  val kafkaClients          = "org.apache.kafka"            % "kafka-clients"           % "2.8.1"
   val scalaLogging          = "com.typesafe.scala-logging" %% "scala-logging"           % "3.9.4"
-  val logbackClassic        = "ch.qos.logback"              % "logback-classic"         % "1.2.8" % Runtime
-  val pureconfig            = "com.github.pureconfig"      %% "pureconfig"              % "0.17.0"
-  val scalaCollectionCompat = "org.scala-lang.modules"     %% "scala-collection-compat" % "2.5.0"
+  val logbackClassic        = "ch.qos.logback"              % "logback-classic"         % "1.2.10" % Runtime
+  val pureconfig            = "com.github.pureconfig"      %% "pureconfig"              % "0.17.1"
+  val scalaCollectionCompat = "org.scala-lang.modules"     %% "scala-collection-compat" % "2.6.0"
 
-  val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "2.8.0" % Test
-  val scalaTest     = "org.scalatest"           %% "scalatest"      % "3.2.9" % Test
+  val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "2.8.1"  % Test
+  val scalaTest     = "org.scalatest"           %% "scalatest"      % "3.2.10" % Test
 
   val core = Akka.base ++ Cats.all ++ Refined.all ++ Seq(
     kafkaClients,
