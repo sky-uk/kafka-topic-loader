@@ -26,7 +26,7 @@ object Dependencies {
     val all             = Seq(base, pureconfig)
   }
 
-  val kafkaClients          = "org.apache.kafka"            % "kafka-clients"           % "2.8.0"
+  val kafkaClients          = "org.apache.kafka"            % "kafka-clients"           % "2.8.1"
   val scalaLogging          = "com.typesafe.scala-logging" %% "scala-logging"           % "3.9.4"
   val logbackClassic        = "ch.qos.logback"              % "logback-classic"         % "1.2.10" % Runtime
   val pureconfig            = "com.github.pureconfig"      %% "pureconfig"              % "0.17.0"
