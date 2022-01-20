@@ -7,6 +7,7 @@ lazy val scmUrl                 = "https://github.com/sky-uk/kafka-topic-loader"
 
 name                   := "kafka-topic-loader"
 organization           := "uk.sky"
+description            := "Reads the contents of provided Kafka topics"
 sonatypeCredentialHost := "s01.oss.sonatype.org"
 sonatypeRepository     := "https://s01.oss.sonatype.org/service/local"
 homepage               := Some(url(scmUrl))
