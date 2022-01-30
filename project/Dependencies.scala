@@ -21,9 +21,9 @@ object Dependencies {
 
   object Refined {
     private val version = "0.9.28"
-    val base            = "eu.timepit" %% "refined"            % version
-    val pureconfig      = "eu.timepit" %% "refined-pureconfig" % version
-    val all             = Seq(base, pureconfig)
+    val base            = "eu.timepit" %% "refined"      % version
+    val cats            = "eu.timepit" %% "refined-cats" % version
+    val all             = Seq(base, cats)
   }
 
   val kafkaClients          = "org.apache.kafka"            % "kafka-clients"           % "3.1.0"
