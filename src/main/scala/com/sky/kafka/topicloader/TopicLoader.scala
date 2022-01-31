@@ -1,7 +1,7 @@
 package com.sky.kafka.topicloader
 
 import java.lang.{Long => JLong}
-import java.util.{List => JList, Map => JMap}
+import java.util.{List => JList, Map => JMap, Optional}
 
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
@@ -45,12 +45,12 @@ object TopicLoader extends TopicLoader with DeprecatedMethods {
         fab.offset,
         fab.timestamp,
         fab.timestampType,
-        ConsumerRecord.NULL_CHECKSUM.toLong,
         fab.serializedKeySize,
         fab.serializedValueSize,
         f(fab.key),
         g(fab.value),
-        fab.headers
+        fab.headers,
+        Optional.empty[Integer]
       )
   }
 
