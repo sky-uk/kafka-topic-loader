@@ -1,16 +1,15 @@
 package com.sky.kafka.topicloader
 
-import cats.data.Validated.{Invalid, Valid}
+import cats.data.Validated._
+import cats.data._
 import cats.implicits._
-import com.typesafe.config.ConfigFactory
-import eu.timepit.refined.cats.syntax._
-import eu.timepit.refined._
-import eu.timepit.refined.api.Refined
-import eu.timepit.refined.auto._
-import eu.timepit.refined.numeric._
+import com.typesafe.config.{Config => TypesafeConfig}
 
 import scala.compat.java8.DurationConverters._
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Try
+
+final case class PosInt(value: Int)
 
 final case class Config(topicLoader: TopicLoaderConfig)
 
@@ -21,25 +20,46 @@ final case class Config(topicLoader: TopicLoaderConfig)
   */
 final case class TopicLoaderConfig(
     idleTimeout: FiniteDuration,
-    bufferSize: Int Refined Positive,
+    bufferSize: PosInt,
 //    @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.3.0")
-    parallelism: Int Refined Positive = 1
+    parallelism: PosInt = PosInt(1)
 )
 
 object Config {
-  def load(): Config = {
-    val basePath     = "topic-loader"
-    val loadedConfig = ConfigFactory.load()
-    (
-      Valid(loadedConfig.getDuration(s"$basePath.idle-timeout").toScala),
-      refineV[Positive](loadedConfig.getInt(s"$basePath.buffer-size")).toValidatedNec,
-      refineV[Positive](loadedConfig.getInt(s"$basePath.parallelism")).toValidatedNec
-    )
-      .mapN(TopicLoaderConfig.apply) match {
-      case Valid(topicLoaderConfig) => Config(topicLoaderConfig)
-      case Invalid(e)               => throw ConfigLoadException(e.show)
+
+  type ValidationResult[A] = ValidatedNec[ConfigParseError, A]
+
+  private def validateConfig(config: TypesafeConfig): ValidationResult[Config] = {
+    def validateDuration(path: String): ValidationResult[FiniteDuration] =
+      Try(config.getDuration(path).toScala).toEither.leftMap(e => ConfigParseError(e.getMessage)).toValidatedNec
+
+    def validatePosInt(path: String): ValidationResult[PosInt] = {
+      val value = config.getInt(path)
+      if (value > 0) PosInt(value).validNec
+      else ConfigParseError(s"Invalid value at '$path': $value is not a positive integer").invalidNec
     }
+
+    val basePath = "topic-loader"
+    (
+      validateDuration(s"$basePath.idle-timeout"),
+      validatePosInt(s"$basePath.buffer-size"),
+      validatePosInt(s"$basePath.parallelism")
+    ).mapN(TopicLoaderConfig.apply)
+      .map(Config(_))
   }
+
+  def loadOrThrow(config: TypesafeConfig): Config =
+    validateConfig(config) match {
+      case Valid(validConfig) =>
+        println(s">>>>>>>>>>Loaded config: $validConfig")
+        validConfig
+      case Invalid(e)         =>
+        val error = ConfigLoadException(e.toNonEmptyList)
+        println(s">>>>>>>>>>Failed to load config: ${error.parseErrors.map(_.message)}")
+        throw error
+    }
 }
 
-final case class ConfigLoadException(message: String) extends RuntimeException
+final case class ConfigParseError(message: String)
+
+final case class ConfigLoadException(parseErrors: NonEmptyList[ConfigParseError]) extends RuntimeException
