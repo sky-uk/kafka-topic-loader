@@ -19,6 +19,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class TopicLoaderIntSpec extends IntegrationSpecBase {
 
@@ -265,6 +266,47 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         consumerSettings(None)
 
       result.properties.get("test") shouldBe None
+    }
+  }
+
+  "config" should {
+
+    "load a valid config correctly" in new TestContext {
+
+      override implicit lazy val system: ActorSystem = ActorSystem(
+        "test-actor-system",
+        ConfigFactory.parseString(
+          s"""
+             |topic-loader {
+             |  idle-timeout = 1 second
+             |  buffer-size = 10
+             |}
+             """.stripMargin
+        )
+      )
+
+      val config = Config.loadOrThrow(system.settings.config)
+      config.topicLoader.idleTimeout shouldBe 1.second
+      config.topicLoader.bufferSize.value shouldBe 10
+    }
+
+    "fail to load a valid config" in new TestContext {
+      override implicit lazy val system: ActorSystem = ActorSystem(
+        "test-actor-system",
+        ConfigFactory.parseString(
+          s"""
+             |topic-loader {
+             |  idle-timeout = 999999999999999999999 minutes
+             |  buffer-size = -1
+             |}
+             """.stripMargin
+        )
+      )
+
+      assertThrows[ConfigLoadException] {
+        Config.loadOrThrow(system.settings.config)
+      }
+
     }
   }
 
