@@ -19,13 +19,6 @@ object Dependencies {
     val all             = Seq(core, kernal)
   }
 
-  object Refined {
-    private val version = "0.9.28"
-    val base            = "eu.timepit" %% "refined"      % version
-    val cats            = "eu.timepit" %% "refined-cats" % version
-    val all             = Seq(base, cats)
-  }
-
   val kafkaClients          = "org.apache.kafka"            % "kafka-clients"           % "3.1.0"
   val scalaLogging          = "com.typesafe.scala-logging" %% "scala-logging"           % "3.9.4"
   val logbackClassic        = "ch.qos.logback"              % "logback-classic"         % "1.2.10" % Runtime
@@ -34,7 +27,7 @@ object Dependencies {
   val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "3.1.0"  % Test
   val scalaTest     = "org.scalatest"           %% "scalatest"      % "3.2.11" % Test
 
-  val core = Akka.base ++ Cats.all ++ Refined.all ++ Seq(
+  val core = Akka.base ++ Cats.all ++ Seq(
     kafkaClients,
     scalaLogging,
     logbackClassic,
