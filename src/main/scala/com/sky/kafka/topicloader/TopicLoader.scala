@@ -15,12 +15,9 @@ import cats.syntax.option._
 import cats.syntax.show._
 import cats.{Bifunctor, Show}
 import com.typesafe.scalalogging.LazyLogging
-import eu.timepit.refined.pureconfig._
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization._
-import pureconfig.ConfigSource
-import pureconfig.generic.auto._
 
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
@@ -78,7 +75,10 @@ trait TopicLoader extends LazyLogging {
       strategy: LoadTopicStrategy,
       maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
-    val config = ConfigSource.fromConfig(system.settings.config).loadOrThrow[Config].topicLoader
+    val config =
+      Config
+        .loadOrThrow(system.settings.config)
+        .topicLoader
     load(logOffsetsForTopics(topics, strategy), config, maybeConsumerSettings)
   }
 
@@ -89,9 +89,8 @@ trait TopicLoader extends LazyLogging {
       topics: NonEmptyList[String],
       maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
-    val config      = ConfigSource.fromConfig(system.settings.config).loadOrThrow[Config].topicLoader
-    val logOffsetsF = logOffsetsForTopics(topics, LoadAll)
-
+    val config            = Config.loadOrThrow(system.settings.config).topicLoader
+    val logOffsetsF       = logOffsetsForTopics(topics, LoadAll)
     val postLoadingSource = Source.futureSource(logOffsetsF.map { logOffsets =>
       val highestOffsets = logOffsets.map { case (p, o) => p -> o.highest }
       kafkaSource[K, V](highestOffsets, config, maybeConsumerSettings)
@@ -284,7 +283,7 @@ trait DeprecatedMethods { self: TopicLoader =>
       onRecord: ConsumerRecord[String, T] => Future[_],
       valueDeserializer: Deserializer[T]
   )(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
-    val config = ConfigSource.fromConfig(system.settings.config).loadOrThrow[Config].topicLoader
+    val config = Config.loadOrThrow(system.settings.config).topicLoader
 
     import system.dispatcher
 
