@@ -50,13 +50,8 @@ object Config {
 
   def loadOrThrow(config: TypesafeConfig): Config =
     validateConfig(config) match {
-      case Valid(validConfig) =>
-        println(s">>>>>>>>>>Loaded config: $validConfig")
-        validConfig
-      case Invalid(e)         =>
-        val error = ConfigLoadException(e.toNonEmptyList)
-        println(s">>>>>>>>>>Failed to load config: ${error.parseErrors.map(_.message)}")
-        throw error
+      case Valid(validConfig) => validConfig
+      case Invalid(e)         => throw ConfigLoadException(e.toNonEmptyList)
     }
 }
 
