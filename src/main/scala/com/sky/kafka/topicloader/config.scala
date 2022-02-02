@@ -1,11 +1,12 @@
 package com.sky.kafka.topicloader
 
+import java.util.concurrent.TimeUnit
+
 import cats.data.Validated._
 import cats.data._
 import cats.implicits._
 import com.typesafe.config.{Config => TypesafeConfig}
 
-import scala.compat.java8.DurationConverters._
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
@@ -31,7 +32,9 @@ object Config {
 
   private def validateConfig(config: TypesafeConfig): ValidationResult[Config] = {
     def validateDuration(path: String): ValidationResult[FiniteDuration] =
-      Try(config.getDuration(path).toScala).toEither.leftMap(e => ConfigParseError(e.getMessage)).toValidatedNec
+      Try(FiniteDuration(config.getDuration(path).toNanos, TimeUnit.NANOSECONDS)).toEither
+        .leftMap(e => ConfigParseError(e.getMessage))
+        .toValidatedNec
 
     def validatePosInt(path: String): ValidationResult[PosInt] = {
       val value = config.getInt(path)
