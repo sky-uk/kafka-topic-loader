@@ -303,9 +303,12 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         )
       )
 
-      assertThrows[ConfigLoadException] {
+      val exceptions = intercept[ConfigLoadException] {
         Config.loadOrThrow(system.settings.config)
-      }
+      }.parseErrors.toList.mkString(",")
+
+      exceptions should include("idle-timeout")
+      exceptions should include("buffer-size")
 
     }
   }
