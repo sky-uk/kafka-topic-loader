@@ -12,7 +12,7 @@ import cats.syntax.option._
 import com.sky.kafka.topicloader.TopicLoader.consumerSettings
 import com.sky.kafka.topicloader._
 import com.sky.kafka.topicloader.config.Config
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException}
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
@@ -297,23 +297,15 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         ConfigFactory.parseString(
           s"""
              |topic-loader {
-             |  idle-timeout = 999999999999999999999 minutes
              |  buffer-size = -1
              |}
              """.stripMargin
         )
       )
 
-      val exceptions: String = intercept[RuntimeException] {
-        Config.loadOrThrow(system.settings.config)
-      }.getMessage
+      val exception: ConfigException = intercept[ConfigException](Config.loadOrThrow(system.settings.config))
 
-      println(s">>>ERROR: $exceptions")
-
-      exceptions should include(
-        "Invalid value at 'topic-loader.idle-timeout': Could not parse duration number '999999999999999999999'"
-      )
-      exceptions should include("Invalid value at 'topic-loader.buffer-size': Int is not positive")
+      exception.getMessage should include("Invalid value at 'topic-loader.buffer-size': Int is not positive")
 
     }
   }
