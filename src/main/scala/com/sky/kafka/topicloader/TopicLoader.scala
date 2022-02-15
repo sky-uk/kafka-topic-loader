@@ -14,6 +14,7 @@ import cats.syntax.bifunctor._
 import cats.syntax.option._
 import cats.syntax.show._
 import cats.{Bifunctor, Show}
+import com.sky.kafka.topicloader.config.{Config, TopicLoaderConfig}
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition

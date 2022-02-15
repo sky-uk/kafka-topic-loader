@@ -11,6 +11,7 @@ import cats.data.NonEmptyList
 import cats.syntax.option._
 import com.sky.kafka.topicloader.TopicLoader.consumerSettings
 import com.sky.kafka.topicloader._
+import com.sky.kafka.topicloader.config.Config
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException}
@@ -303,12 +304,16 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         )
       )
 
-      val exceptions = intercept[ConfigLoadException] {
+      val exceptions: String = intercept[RuntimeException] {
         Config.loadOrThrow(system.settings.config)
-      }.parseErrors.toList.mkString(",")
+      }.getMessage
 
-      exceptions should include("idle-timeout")
-      exceptions should include("buffer-size")
+      println(s">>>ERROR: $exceptions")
+
+      exceptions should include(
+        "Invalid value at 'topic-loader.idle-timeout': Could not parse duration number '999999999999999999999'"
+      )
+      exceptions should include("Invalid value at 'topic-loader.buffer-size': Int is not positive")
 
     }
   }
