@@ -5,6 +5,7 @@ import java.util.concurrent.TimeUnit
 import com.typesafe.config.{Config => TypesafeConfig, ConfigException}
 
 import scala.concurrent.duration.FiniteDuration
+import scala.util.{Failure, Success, Try}
 
 package object config {
   final case class PosInt(value: Int) {
@@ -15,10 +16,14 @@ package object config {
     def getFiniteDuration(path: String): FiniteDuration =
       FiniteDuration(underlying.getDuration(path).toNanos, TimeUnit.NANOSECONDS)
 
-    def getPosInt(path: String): PosInt = {
-      val configInt = underlying.getInt(path)
-      if (configInt > 0) PosInt(configInt)
-      else throw new ConfigException.BadValue(path, "Int is not positive")
-    }
+    def getPosInt(path: String): PosInt =
+      Try(PosInt(underlying.getInt(path))) match {
+        case Failure(exception) =>
+          exception match {
+            case _: IllegalArgumentException => throw new ConfigException.BadValue(path, "Int is not positive")
+            case _                           => throw exception
+          }
+        case Success(value)     => value
+      }
   }
 }
