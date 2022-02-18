@@ -1,8 +1,11 @@
 package com.sky.kafka.topicloader.config
 
-import com.typesafe.config.{Config => TypesafeConfig}
+import cats.data.Validated
+import cats.implicits._
+import com.typesafe.config.{Config => TypesafeConfig, ConfigException}
 
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Try
 
 final case class Config(topicLoader: TopicLoaderConfig)
 
@@ -23,11 +26,15 @@ object Config {
   private val basePath = "topic-loader"
 
   def loadOrThrow(config: TypesafeConfig): Config =
-    Config(
-      TopicLoaderConfig(
-        config.getFiniteDuration(s"$basePath.idle-timeout"),
-        config.getPosInt(s"$basePath.buffer-size"),
-        config.getPosInt(s"$basePath.parallelism")
-      )
-    )
+    (
+      Try(config.get[FiniteDuration](s"$basePath.idle-timeout")).validate(),
+      Try(config.get[PosInt](s"$basePath.buffer-size")).validate(),
+      Try(config.get[PosInt](s"$basePath.parallelism")).validate()
+    ).mapN(TopicLoaderConfig.apply).map(Config(_)) match {
+      case Validated.Valid(config)   => config
+      case Validated.Invalid(errors) =>
+        throw new ConfigException.Generic(
+          s"Error loading config:\n\t${errors.toNonEmptyList.toList.mkString("\t\n")}\n"
+        )
+    }
 }

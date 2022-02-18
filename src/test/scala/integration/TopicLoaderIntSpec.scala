@@ -297,6 +297,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         ConfigFactory.parseString(
           s"""
              |topic-loader {
+             |  idle-timeout = 9999999999999999999999 seconds
              |  buffer-size = -1
              |}
              """.stripMargin
@@ -305,6 +306,9 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
       val exception: ConfigException = intercept[ConfigException](Config.loadOrThrow(system.settings.config))
 
+      exception.getMessage should include(
+        "Invalid value at 'topic-loader.idle-timeout': Could not parse duration number '9999999999999999999999'"
+      )
       exception.getMessage should include("Invalid value at 'topic-loader.buffer-size': Int is not positive")
 
     }
