@@ -17,8 +17,12 @@ package object config {
     def validate(): ValidationResult[A] = t.toEither.toValidatedNec
   }
 
-  final case class PosInt(value: Int) {
-    require(value > 0)
+  final case class PosInt(private val value: Int)
+
+  object PosInt {
+    def apply(value: Int): PosInt =
+      if (value > 0) new PosInt(value)
+      else throw new IllegalArgumentException(s"$value is not a positive Int")
   }
 
   trait FromConfig[A] {
@@ -31,7 +35,7 @@ package object config {
       Try(PosInt(intReader.fromConfig(path, config))) match {
         case Failure(exception) =>
           exception match {
-            case _: IllegalArgumentException => throw new ConfigException.BadValue(path, "Int is not positive")
+            case a: IllegalArgumentException => throw new ConfigException.BadValue(path, a.getMessage)
             case _                           => throw exception
           }
         case Success(value)     => value
