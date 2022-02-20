@@ -17,7 +17,9 @@ package object config {
     def validate(): ValidationResult[A] = t.toEither.toValidatedNec
   }
 
-  final case class PosInt(private val value: Int)
+  final case class PosInt(private val _value: Int) {
+    val value: Int = _value
+  }
 
   object PosInt {
     def apply(value: Int): PosInt =
