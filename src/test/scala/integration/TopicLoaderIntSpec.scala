@@ -309,7 +309,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       exception.getMessage should include(
         "Invalid value at 'topic-loader.idle-timeout': Could not parse duration number '9999999999999999999999'"
       )
-      exception.getMessage should include("Invalid value at 'topic-loader.buffer-size': Int is not positive")
+      exception.getMessage should include("Invalid value at 'topic-loader.buffer-size': -1 is not a positive Int")
 
     }
   }
