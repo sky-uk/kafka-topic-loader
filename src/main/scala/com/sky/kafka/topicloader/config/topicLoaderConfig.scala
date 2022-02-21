@@ -8,7 +8,7 @@ import cats.implicits._
 import com.typesafe.config.{Config => TypesafeConfig, ConfigException}
 
 import scala.concurrent.duration.FiniteDuration
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 trait FromConfig[A] {
   def fromConfig(path: String, config: TypesafeConfig): A
@@ -17,13 +17,9 @@ trait FromConfig[A] {
 object FromConfig {
   implicit val intReader: FromConfig[Int]                       = (path: String, config: TypesafeConfig) => config.getInt(path)
   implicit val posIntReader: FromConfig[PosInt]                 = (path: String, config: TypesafeConfig) =>
-    Try(PosInt(intReader.fromConfig(path, config))) match {
-      case Failure(exception) =>
-        exception match {
-          case e: IllegalArgumentException => throw new ConfigException.BadValue(path, e.getMessage)
-          case _                           => throw exception
-        }
-      case Success(value)     => value
+    PosInt(intReader.fromConfig(path, config)) match {
+      case Left(e)       => throw new ConfigException.BadValue(path, e.getMessage)
+      case Right(posInt) => posInt
     }
   implicit val durationReader: FromConfig[Duration]             = (path: String, config: TypesafeConfig) => config.getDuration(path)
   implicit val finiteDurationReader: FromConfig[FiniteDuration] = (path: String, config: TypesafeConfig) =>
@@ -35,9 +31,9 @@ final case class PosInt(private val _value: Int) {
 }
 
 object PosInt {
-  def apply(value: Int): PosInt =
-    if (value > 0) new PosInt(value)
-    else throw new IllegalArgumentException(s"$value is not a positive Int")
+  def apply(value: Int): Either[IllegalArgumentException, PosInt] =
+    if (value > 0) new PosInt(value).asRight
+    else new IllegalArgumentException(s"$value is not a positive Int").asLeft
 }
 
 final case class Config(topicLoader: TopicLoaderConfig)
@@ -52,7 +48,7 @@ final case class TopicLoaderConfig(
     idleTimeout: FiniteDuration,
     bufferSize: PosInt,
 //    @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.3.0")
-    parallelism: PosInt = PosInt(1)
+    parallelism: PosInt = PosInt(1).fold(e => throw e, identity)
 )
 
 object Config {
