@@ -37,7 +37,7 @@ package object config {
       Try(PosInt(intReader.fromConfig(path, config))) match {
         case Failure(exception) =>
           exception match {
-            case a: IllegalArgumentException => throw new ConfigException.BadValue(path, a.getMessage)
+            case e: IllegalArgumentException => throw new ConfigException.BadValue(path, e.getMessage)
             case _                           => throw exception
           }
         case Success(value)     => value

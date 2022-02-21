@@ -306,11 +306,11 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
       val exception: ConfigException = intercept[ConfigException](Config.loadOrThrow(system.settings.config))
 
-      exception.getMessage should include(
-        "Invalid value at 'topic-loader.idle-timeout': Could not parse duration number '9999999999999999999999'"
+      exception.getMessage should (
+        include(
+          "Invalid value at 'topic-loader.idle-timeout': Could not parse duration number '9999999999999999999999'"
+        ) and include("Invalid value at 'topic-loader.buffer-size': -1 is not a positive Int")
       )
-      exception.getMessage should include("Invalid value at 'topic-loader.buffer-size': -1 is not a positive Int")
-
     }
   }
 
