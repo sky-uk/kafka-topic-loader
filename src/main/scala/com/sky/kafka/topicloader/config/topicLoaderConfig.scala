@@ -26,7 +26,7 @@ object FromConfig {
     FiniteDuration(durationReader.fromConfig(path, config).toNanos, TimeUnit.NANOSECONDS)
 }
 
-final case class PosInt(private val _value: Int) {
+final case class PosInt private (_value: Int) {
   val value: Int = _value
 }
 
