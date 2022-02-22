@@ -1,30 +1,13 @@
 package com.sky.kafka.topicloader.config
 
-import java.time.Duration
 import java.util.concurrent.TimeUnit
 
-import cats.data.Validated
+import cats.data.{Validated, ValidatedNec}
 import cats.implicits._
 import com.typesafe.config.{Config => TypesafeConfig, ConfigException}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
-
-trait FromConfig[A] {
-  def fromConfig(path: String, config: TypesafeConfig): A
-}
-
-object FromConfig {
-  implicit val intReader: FromConfig[Int]                       = (path: String, config: TypesafeConfig) => config.getInt(path)
-  implicit val posIntReader: FromConfig[PosInt]                 = (path: String, config: TypesafeConfig) =>
-    PosInt(intReader.fromConfig(path, config)) match {
-      case Left(e)       => throw new ConfigException.BadValue(path, e.getMessage)
-      case Right(posInt) => posInt
-    }
-  implicit val durationReader: FromConfig[Duration]             = (path: String, config: TypesafeConfig) => config.getDuration(path)
-  implicit val finiteDurationReader: FromConfig[FiniteDuration] = (path: String, config: TypesafeConfig) =>
-    FiniteDuration(durationReader.fromConfig(path, config).toNanos, TimeUnit.NANOSECONDS)
-}
 
 final case class PosInt private (_value: Int) {
   val value: Int = _value
@@ -56,16 +39,25 @@ final case class TopicLoaderConfig(
 object Config {
   private val basePath = "topic-loader"
 
-  def loadOrThrow(config: TypesafeConfig): Config =
-    (
-      Try(config.get[FiniteDuration](s"$basePath.idle-timeout")).validate(),
-      Try(config.get[PosInt](s"$basePath.buffer-size")).validate(),
-      Try(config.get[PosInt](s"$basePath.parallelism")).validate()
-    ).mapN(TopicLoaderConfig.apply).map(Config(_)) match {
-      case Validated.Valid(config)   => config
-      case Validated.Invalid(errors) =>
-        throw new ConfigException.Generic(
-          s"Error loading config:\n\t${errors.toNonEmptyList.toList.mkString("\t\n")}\n"
-        )
-    }
+  def load(config: TypesafeConfig): ValidatedNec[ConfigException, Config] = {
+    val idleTimeout = Try(
+      FiniteDuration(config.getDuration(s"$basePath.idle-timeout").toNanos, TimeUnit.NANOSECONDS)
+    ).validate(s"$basePath.idle-timeout")
+
+    val bufferSize = PosInt(config.getInt(s"$basePath.buffer-size"))
+      .validate(s"$basePath.buffer-size")
+
+    val parallelism = PosInt(config.getInt(s"$basePath.parallelism"))
+      .validate(s"$basePath.parallelism")
+
+    (idleTimeout, bufferSize, parallelism).mapN(TopicLoaderConfig.apply).map(Config.apply)
+  }
+
+  def loadOrThrow(config: TypesafeConfig): Config = load(config) match {
+    case Validated.Valid(config) => config
+    case Validated.Invalid(e)    =>
+      throw new ConfigException.Generic(
+        s"Error loading config:\n\t${e.toNonEmptyList.toList.mkString("\t\n")}\n"
+      )
+  }
 }
