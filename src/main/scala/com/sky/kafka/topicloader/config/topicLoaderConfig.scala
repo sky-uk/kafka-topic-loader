@@ -18,7 +18,7 @@ object PosInt {
     if (value > 0) new PosInt(value).asRight
     else new IllegalArgumentException(s"$value is not a positive Int").asLeft
 
-  def unsafeApply(value: Int): PosInt = PosInt(value).fold(throw _, identity)
+  val One = new PosInt(1)
 }
 
 final case class Config(topicLoader: TopicLoaderConfig)
@@ -33,7 +33,7 @@ final case class TopicLoaderConfig(
     idleTimeout: FiniteDuration,
     bufferSize: PosInt,
 //    @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.3.0")
-    parallelism: PosInt = PosInt.unsafeApply(1)
+    parallelism: PosInt = PosInt.One
 )
 
 object Config {
