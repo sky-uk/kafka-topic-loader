@@ -11,7 +11,8 @@ import cats.data.NonEmptyList
 import cats.syntax.option._
 import com.sky.kafka.topicloader.TopicLoader.consumerSettings
 import com.sky.kafka.topicloader._
-import com.typesafe.config.ConfigFactory
+import com.sky.kafka.topicloader.config.Config
+import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException}
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
@@ -19,6 +20,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class TopicLoaderIntSpec extends IntegrationSpecBase {
 
@@ -265,6 +267,50 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         consumerSettings(None)
 
       result.properties.get("test") shouldBe None
+    }
+  }
+
+  "config" should {
+
+    "load a valid config correctly" in new TestContext {
+
+      override implicit lazy val system: ActorSystem = ActorSystem(
+        "test-actor-system",
+        ConfigFactory.parseString(
+          s"""
+             |topic-loader {
+             |  idle-timeout = 1 second
+             |  buffer-size = 10
+             |}
+             """.stripMargin
+        )
+      )
+
+      val config = Config.loadOrThrow(system.settings.config)
+      config.topicLoader.idleTimeout shouldBe 1.second
+      config.topicLoader.bufferSize.value shouldBe 10
+    }
+
+    "fail to load a valid config" in new TestContext {
+      override implicit lazy val system: ActorSystem = ActorSystem(
+        "test-actor-system",
+        ConfigFactory.parseString(
+          s"""
+             |topic-loader {
+             |  idle-timeout = 9999999999999999999999 seconds
+             |  buffer-size = -1
+             |}
+             """.stripMargin
+        )
+      )
+
+      val exception: ConfigException = intercept[ConfigException](Config.loadOrThrow(system.settings.config))
+
+      exception.getMessage should (
+        include(
+          "Invalid value at 'topic-loader.idle-timeout': Could not parse duration number '9999999999999999999999'"
+        ) and include("Invalid value at 'topic-loader.buffer-size': -1 is not a positive Int")
+      )
     }
   }
 

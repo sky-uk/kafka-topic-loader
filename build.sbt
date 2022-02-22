@@ -37,6 +37,7 @@ ThisBuild / scalacOptions ++= Seq(
   "-unchecked",
   "-Xcheckinit",
   "-Xfatal-warnings",
+  "-Xsource:3",
   "-Ywarn-dead-code",
   "-Ywarn-extra-implicit",
   "-Ywarn-numeric-widen",
