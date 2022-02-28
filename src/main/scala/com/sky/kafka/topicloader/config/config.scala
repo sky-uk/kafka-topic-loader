@@ -5,18 +5,20 @@ import cats.implicits._
 import com.typesafe.config.ConfigException
 
 import scala.util.Try
+import scala.util.control.NonFatal
 
 package object config {
   type ValidationResult[A] = ValidatedNec[ConfigException, A]
 
   implicit class TryOps[A](t: Try[A]) {
-    def validate(path: String): ValidationResult[A] = t.toEither.validate(path)
+    private[topicloader] def validate(path: String): ValidationResult[A] = t.toEither.leftMap {
+      case ce: ConfigException => ce
+      case NonFatal(e)         => new ConfigException.BadValue(path, e.getMessage)
+    }.toValidatedNec
   }
 
-  implicit class EitherOps[A](e: Either[Throwable, A]) {
-    def validate(path: String): ValidationResult[A] = e.leftMap {
-      case ce: ConfigException => ce
-      case e: Throwable        => new ConfigException.BadValue(path, e.getMessage)
-    }.toValidatedNec
+  implicit class EitherOps[A](e: Either[IllegalArgumentException, A]) {
+    private[topicloader] def validate(path: String): ValidationResult[A] =
+      e.leftMap(e => new ConfigException.BadValue(path, e.getMessage)).toValidatedNec
   }
 }

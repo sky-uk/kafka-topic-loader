@@ -291,7 +291,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       config.topicLoader.bufferSize.value shouldBe 10
     }
 
-    "fail to load a valid config" in new TestContext {
+    "fail to load an invalid config" in new TestContext {
       override implicit lazy val system: ActorSystem = ActorSystem(
         "test-actor-system",
         ConfigFactory.parseString(
