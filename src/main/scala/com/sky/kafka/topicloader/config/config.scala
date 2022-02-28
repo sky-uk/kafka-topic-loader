@@ -5,6 +5,7 @@ import cats.implicits._
 import com.typesafe.config.ConfigException
 
 import scala.util.Try
+import scala.util.control.NonFatal
 
 package object config {
   type ValidationResult[A] = ValidatedNec[ConfigException, A]
@@ -16,7 +17,8 @@ package object config {
   implicit class EitherOps[A](e: Either[Throwable, A]) {
     def validate(path: String): ValidationResult[A] = e.leftMap {
       case ce: ConfigException => ce
-      case e: Throwable        => new ConfigException.BadValue(path, e.getMessage)
+      case e if NonFatal(e)    => new ConfigException.BadValue(path, e.getMessage)
+      case e: Throwable        => throw e
     }.toValidatedNec
   }
 }
