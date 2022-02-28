@@ -17,7 +17,7 @@ package object config {
   implicit class EitherOps[A](e: Either[Throwable, A]) {
     def validate(path: String): ValidationResult[A] = e.leftMap {
       case ce: ConfigException => ce
-      case e if NonFatal(e)    => new ConfigException.BadValue(path, e.getMessage)
+      case NonFatal(e)         => new ConfigException.BadValue(path, e.getMessage)
       case e: Throwable        => throw e
     }.toValidatedNec
   }
