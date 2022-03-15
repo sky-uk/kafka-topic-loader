@@ -26,33 +26,12 @@ crossScalaVersions := supportedScalaVersions
 semanticdbEnabled  := true
 semanticdbVersion  := scalafixSemanticdb.revision
 
-// format: off
 ThisBuild / scalacOptions ++= Seq(
-  "-deprecation",
-  "-encoding", "utf8",
-  "-explaintypes",
-  "-feature",
-  "-language:existentials",
-  "-language:higherKinds",
-  "-unchecked",
-  "-Xcheckinit",
-  "-Xfatal-warnings",
   "-Xsource:3",
-  "-Ywarn-dead-code",
-  "-Ywarn-extra-implicit",
-  "-Ywarn-numeric-widen",
-  "-Ywarn-unused:implicits",
-  "-Ywarn-unused:imports",
-  "-Ywarn-unused:locals",
-  "-Ywarn-unused:params",
-  "-Ywarn-unused:patvars",
-  "-Ywarn-unused:privates",
-  "-Ywarn-value-discard"
+  "-explaintypes"
 ) ++ {
-  if (scalaBinaryVersion.value == "2.13") Seq("-Wconf:msg=annotation:silent")
-  else Seq("-Xfuture", "-Ypartial-unification", "-Yno-adapted-args")
+  if (scalaBinaryVersion.value == "2.13") Seq("-Wconf:msg=annotation:silent") else Nil
 }
-// format: on
 
 ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.6.0"
 
