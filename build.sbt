@@ -30,8 +30,8 @@ tpolecatScalacOptions ++= Set(ScalacOptions.source3)
 
 ThisBuild / scalacOptions ++= Seq("-explaintypes") ++ {
   CrossVersion.partialVersion(scalaVersion.value) match {
-    case Some((2, 13)) => Seq("-Wconf:msg=annotation:silent")
-    case _             => Nil
+    case Some((3, _)) | Some((2, 13)) => Seq("-Wconf:msg=annotation:silent")
+    case _                            => Nil
   }
 }
 
