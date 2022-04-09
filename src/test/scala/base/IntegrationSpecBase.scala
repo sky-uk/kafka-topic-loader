@@ -25,13 +25,13 @@ import scala.jdk.CollectionConverters._
 
 abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
-  override implicit val patienceConfig = PatienceConfig(20.seconds, 200.millis)
+  override implicit val patienceConfig: PatienceConfig = PatienceConfig(20.seconds, 200.millis)
 
-  implicit val timeout = Timeout(5.seconds)
+  implicit val timeout: Timeout = Timeout(5.seconds)
 
   trait TestContext extends AkkaSpecBase with EmbeddedKafka {
 
-    implicit lazy val kafkaConfig =
+    implicit lazy val kafkaConfig: EmbeddedKafkaConfig =
       EmbeddedKafkaConfig(kafkaPort = RandomPort(), zooKeeperPort = RandomPort(), Map("log.roll.ms" -> "10"))
 
     override implicit lazy val system: ActorSystem = ActorSystem(
