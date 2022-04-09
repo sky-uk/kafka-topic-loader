@@ -1,5 +1,6 @@
 import Dependencies.all
 
+lazy val scala3                 = "3.1.1"
 lazy val scala213               = "2.13.8"
 lazy val scala212               = "2.12.15"
 lazy val supportedScalaVersions = List(scala213, scala212)
@@ -21,7 +22,7 @@ developers             := List(
   )
 )
 
-scalaVersion       := scala213
+scalaVersion       := scala3
 crossScalaVersions := supportedScalaVersions
 semanticdbEnabled  := true
 semanticdbVersion  := scalafixSemanticdb.revision
@@ -43,6 +44,15 @@ Test / fork              := true
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
 libraryDependencies ++= all
+
+excludeDependencies ++= {
+  if (scalaBinaryVersion.value == "3")
+    Seq(
+      "com.typesafe.scala-logging" % "scala-logging_2.13",
+      "org.scala-lang.modules"     % "scala-collection-compat_2.13"
+    )
+  else Seq.empty
+}
 
 addCommandAlias("checkFix", "scalafixAll --check OrganizeImports; scalafixAll --check")
 addCommandAlias("runFix", "scalafixAll OrganizeImports; scalafixAll")
