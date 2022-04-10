@@ -31,6 +31,11 @@ object Dependencies {
   val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "3.1.0"  % Test cross CrossVersion.for3Use2_13
   val scalaTest     = "org.scalatest"           %% "scalatest"      % "3.2.12" % Test
 
+  val scala3Exclusions = Seq(
+    "com.typesafe.scala-logging" % "scala-logging_2.13",
+    "org.scala-lang.modules"     % "scala-collection-compat_2.13"
+  )
+
   val core = Akka.base ++ Cats.all ++ Seq(
     kafkaClients,
     scalaLogging,

@@ -38,6 +38,13 @@ ThisBuild / scalacOptions ++= Seq("-explaintypes") ++ {
 
 ThisBuild / scalafixDependencies += Dependencies.Plugins.organizeImports
 
+scalafixConfig           := {
+  CrossVersion.partialVersion(scalaVersion.value) match {
+    case Some((3, _)) => Some((ThisBuild / baseDirectory).value / ".scalafix3.conf")
+    case _            => None
+  }
+}
+
 Test / parallelExecution := false
 Test / fork              := true
 
@@ -46,12 +53,10 @@ Global / onChangedBuildSource := ReloadOnSourceChanges
 libraryDependencies ++= all
 
 excludeDependencies ++= {
-  if (scalaBinaryVersion.value == "3")
-    Seq(
-      "com.typesafe.scala-logging" % "scala-logging_2.13",
-      "org.scala-lang.modules"     % "scala-collection-compat_2.13"
-    )
-  else Seq.empty
+  CrossVersion.partialVersion(scalaVersion.value) match {
+    case Some((3, _)) => Dependencies.scala3Exclusions
+    case _            => Seq.empty
+  }
 }
 
 addCommandAlias("checkFix", "scalafixAll --check OrganizeImports; scalafixAll --check")
