@@ -115,7 +115,8 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
   }
 
   class RecordStore()(implicit system: ActorSystem) {
-    private val storeActor = system.actorOf(Props(classOf[Store]))
+    private val storeActor = system.actorOf(Props(new Store))
+
 
     def storeRecord(rec: ConsumerRecord[String, String])(implicit timeout: Timeout): Future[Int] =
       (storeActor ? rec).mapTo[Int]
