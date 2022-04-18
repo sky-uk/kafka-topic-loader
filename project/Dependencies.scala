@@ -2,6 +2,10 @@ import sbt._
 
 object Dependencies {
 
+  object Plugins {
+    val organizeImports = "com.github.liancheng" %% "organize-imports" % "0.6.0"
+  }
+
   object Akka {
     private val version = "2.6.18"
     val stream          = "com.typesafe.akka" %% "akka-stream"         % version

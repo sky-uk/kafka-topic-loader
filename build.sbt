@@ -26,14 +26,16 @@ crossScalaVersions := supportedScalaVersions
 semanticdbEnabled  := true
 semanticdbVersion  := scalafixSemanticdb.revision
 
-ThisBuild / scalacOptions ++= Seq(
-  "-Xsource:3",
-  "-explaintypes"
-) ++ {
-  if (scalaBinaryVersion.value == "2.13") Seq("-Wconf:msg=annotation:silent") else Nil
+tpolecatScalacOptions ++= Set(ScalacOptions.source3)
+
+ThisBuild / scalacOptions ++= Seq("-explaintypes") ++ {
+  CrossVersion.partialVersion(scalaVersion.value) match {
+    case Some((2, 13)) => Seq("-Wconf:msg=annotation:silent")
+    case _             => Nil
+  }
 }
 
-ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.6.0"
+ThisBuild / scalafixDependencies += Dependencies.Plugins.organizeImports
 
 Test / parallelExecution := false
 Test / fork              := true
