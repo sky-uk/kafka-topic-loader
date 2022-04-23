@@ -26,35 +26,16 @@ crossScalaVersions := supportedScalaVersions
 semanticdbEnabled  := true
 semanticdbVersion  := scalafixSemanticdb.revision
 
-// format: off
-ThisBuild / scalacOptions ++= Seq(
-  "-deprecation",
-  "-encoding", "utf8",
-  "-explaintypes",
-  "-feature",
-  "-language:existentials",
-  "-language:higherKinds",
-  "-unchecked",
-  "-Xcheckinit",
-  "-Xfatal-warnings",
-  "-Xsource:3",
-  "-Ywarn-dead-code",
-  "-Ywarn-extra-implicit",
-  "-Ywarn-numeric-widen",
-  "-Ywarn-unused:implicits",
-  "-Ywarn-unused:imports",
-  "-Ywarn-unused:locals",
-  "-Ywarn-unused:params",
-  "-Ywarn-unused:patvars",
-  "-Ywarn-unused:privates",
-  "-Ywarn-value-discard"
-) ++ {
-  if (scalaBinaryVersion.value == "2.13") Seq("-Wconf:msg=annotation:silent")
-  else Seq("-Xfuture", "-Ypartial-unification", "-Yno-adapted-args")
-}
-// format: on
+tpolecatScalacOptions ++= Set(ScalacOptions.source3)
 
-ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.6.0"
+ThisBuild / scalacOptions ++= Seq("-explaintypes") ++ {
+  CrossVersion.partialVersion(scalaVersion.value) match {
+    case Some((2, 13)) => Seq("-Wconf:msg=annotation:silent")
+    case _             => Nil
+  }
+}
+
+ThisBuild / scalafixDependencies += Dependencies.Plugins.organizeImports
 
 Test / parallelExecution := false
 Test / fork              := true
