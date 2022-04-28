@@ -2,12 +2,11 @@ package utils
 
 import java.net.ServerSocket
 
+import scala.util.Using
+
 object RandomPort {
-  def apply(): Int = {
-    val socket = new ServerSocket(0)
+  def apply(): Int = Using.resource(new ServerSocket(0)) { socket =>
     socket.setReuseAddress(true)
-    val port   = socket.getLocalPort
-    socket.close()
-    port
+    socket.getLocalPort
   }
 }
