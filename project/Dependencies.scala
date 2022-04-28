@@ -29,7 +29,7 @@ object Dependencies {
   val scalaCollectionCompat = "org.scala-lang.modules"     %% "scala-collection-compat" % "2.7.0"
 
   val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "3.1.0"  % Test
-  val scalaTest     = "org.scalatest"           %% "scalatest"      % "3.2.11" % Test
+  val scalaTest     = "org.scalatest"           %% "scalatest"      % "3.2.12" % Test
 
   val core = Akka.base ++ Cats.all ++ Seq(
     kafkaClients,
