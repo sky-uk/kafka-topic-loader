@@ -8,7 +8,7 @@ import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Flow, Keep, Source}
-import akka.{Done, NotUsed}
+import akka.Done
 import cats.data.NonEmptyList
 import cats.syntax.bifunctor._
 import cats.syntax.option._
@@ -23,7 +23,7 @@ import uk.sky.kafka.topicloader.config.{Config, TopicLoaderConfig}
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
 
-object TopicLoader extends TopicLoader with DeprecatedMethods {
+object TopicLoader extends TopicLoader {
   private[topicloader] case class LogOffsets(lowest: Long, highest: Long)
 
   private case class HighestOffsetsWithRecord[K, V](
@@ -235,64 +235,5 @@ trait TopicLoader extends LazyLogging {
     val updatedHighests = reachedHighest.fold(t.partitionOffsets)(highest => t.partitionOffsets - highest)
     val emittableRecord = partitionHighest.collect { case h if r.offset() <= h => r }
     HighestOffsetsWithRecord(updatedHighests, emittableRecord)
-  }
-}
-
-trait DeprecatedMethods { self: TopicLoader =>
-
-  import TopicLoader._
-
-  @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.2.8")
-  def apply[T](
-      strategy: LoadTopicStrategy,
-      topics: NonEmptyList[String],
-      onRecord: ConsumerRecord[String, T] => Future[_],
-      valueDeserializer: Deserializer[T]
-  )(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] =
-    fromTopics(strategy, topics, onRecord, valueDeserializer)
-
-  /** Consumes the records from the provided topics, passing them through `onRecord`.
-    */
-  @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.3.0")
-  def fromTopics[T](
-      strategy: LoadTopicStrategy,
-      topics: NonEmptyList[String],
-      onRecord: ConsumerRecord[String, T] => Future[_],
-      valueDeserializer: Deserializer[T]
-  )(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
-    val logOffsets = logOffsetsForTopics(topics, strategy)
-    deprecatedLoad(logOffsets, onRecord, valueDeserializer)
-  }
-
-  private val keySerializer = new StringDeserializer
-
-  /** Consumes the records from the provided partitions, passing them through `onRecord`.
-    */
-  @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.3.0")
-  def fromPartitions[T](
-      strategy: LoadTopicStrategy,
-      partitions: NonEmptyList[TopicPartition],
-      onRecord: ConsumerRecord[String, T] => Future[_],
-      valueDeserializer: Deserializer[T]
-  )(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
-    val logOffsets = logOffsetsForPartitions(partitions, strategy)
-    deprecatedLoad(logOffsets, onRecord, valueDeserializer)
-  }
-
-  private def deprecatedLoad[T](
-      logOffsets: Future[Map[TopicPartition, LogOffsets]],
-      onRecord: ConsumerRecord[String, T] => Future[_],
-      valueDeserializer: Deserializer[T]
-  )(implicit system: ActorSystem): Source[Map[TopicPartition, Long], NotUsed] = {
-    val config = Config.loadOrThrow(system.settings.config).topicLoader
-
-    import system.dispatcher
-
-    load(logOffsets, config, None)(keySerializer, valueDeserializer, system)
-      .mapMaterializedValue(_ => NotUsed)
-      .mapAsync(config.parallelism.value)(r => onRecord(r).map(_ => r))
-      .fold(logOffsets) { case (acc, _) => acc }
-      .flatMapConcat(Source.future)
-      .map(_.map { case (p, o) => p -> o.highest })
   }
 }

@@ -23,17 +23,9 @@ object PosInt {
 
 final case class Config(topicLoader: TopicLoaderConfig)
 
-/** @param parallelism
-  *   Determines how many Kafka records are processed in parallel by [[uk.sky.kafka.topicloader.TopicLoader]]. We
-  *   recommend using a parallelism > 1 if you are processing the records by sending them to an akka.actor.Actor. This
-  *   is so that messages are buffered in the akka.actor.Actor's mailbox, improving performance versus using a
-  *   parallelism of 1.
-  */
 final case class TopicLoaderConfig(
     idleTimeout: FiniteDuration,
-    bufferSize: PosInt,
-//    @deprecated("Kept for backward compatibility until clients can adapt", "TopicLoader 1.3.0")
-    parallelism: PosInt = PosInt.One
+    bufferSize: PosInt
 )
 
 object Config {
@@ -47,10 +39,7 @@ object Config {
     val bufferSize = PosInt(config.getInt(s"$basePath.buffer-size"))
       .validate(s"$basePath.buffer-size")
 
-    val parallelism = PosInt(config.getInt(s"$basePath.parallelism"))
-      .validate(s"$basePath.parallelism")
-
-    (idleTimeout, bufferSize, parallelism).mapN(TopicLoaderConfig.apply).map(Config.apply)
+    (idleTimeout, bufferSize).mapN(TopicLoaderConfig.apply).map(Config.apply)
   }
 
   def loadOrThrow(config: TypesafeConfig): Config = load(config) match {
