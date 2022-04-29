@@ -36,6 +36,14 @@ ThisBuild / scalacOptions ++= Seq("-explaintypes") ++ {
 
 ThisBuild / scalafixDependencies += Dependencies.Plugins.organizeImports
 
+/** Scala 3 doesn't support two rules yet - RemoveUnused and ProcedureSyntax. So we require a different scalafix config
+  * for Scala 3
+  *
+  * RemoveUnused relies on -warn-unused which isn't available in scala 3 yet -
+  * https://scalacenter.github.io/scalafix/docs/rules/RemoveUnused.html
+  *
+  * ProcedureSyntax doesn't exist in Scala 3 - https://scalacenter.github.io/scalafix/docs/rules/ProcedureSyntax.html
+  */
 scalafixConfig           := {
   CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((3, _)) => Some((ThisBuild / baseDirectory).value / ".scalafix3.conf")
