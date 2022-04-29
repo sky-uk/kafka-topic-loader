@@ -1,4 +1,4 @@
-package com.sky.kafka.topicloader.config
+package uk.sky.kafka.topicloader.config
 
 import java.util.concurrent.TimeUnit
 
@@ -24,7 +24,7 @@ object PosInt {
 final case class Config(topicLoader: TopicLoaderConfig)
 
 /** @param parallelism
-  *   Determines how many Kafka records are processed in parallel by [[com.sky.kafka.topicloader.TopicLoader]]. We
+  *   Determines how many Kafka records are processed in parallel by [[uk.sky.kafka.topicloader.TopicLoader]]. We
   *   recommend using a parallelism > 1 if you are processing the records by sending them to an akka.actor.Actor. This
   *   is so that messages are buffered in the akka.actor.Actor's mailbox, improving performance versus using a
   *   parallelism of 1.

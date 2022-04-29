@@ -9,15 +9,15 @@ import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import cats.syntax.option._
-import com.sky.kafka.topicloader.TopicLoader.consumerSettings
-import com.sky.kafka.topicloader._
-import com.sky.kafka.topicloader.config.Config
 import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException}
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.prop.Tables.Table
+import uk.sky.kafka.topicloader.TopicLoader.consumerSettings
+import uk.sky.kafka.topicloader._
+import uk.sky.kafka.topicloader.config.Config
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
