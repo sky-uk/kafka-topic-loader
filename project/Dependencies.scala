@@ -8,10 +8,10 @@ object Dependencies {
 
   object Akka {
     private val version = "2.6.19"
-    val stream          = "com.typesafe.akka" %% "akka-stream"         % version
-    val streamKafka     = "com.typesafe.akka" %% "akka-stream-kafka"   % "2.1.1"
-    val streamTestkit   = "com.typesafe.akka" %% "akka-stream-testkit" % version % Test
-    val testkit         = "com.typesafe.akka" %% "akka-testkit"        % version % Test
+    val stream          = "com.typesafe.akka" %% "akka-stream"         % version cross CrossVersion.for3Use2_13
+    val streamKafka     = "com.typesafe.akka" %% "akka-stream-kafka"   % "2.1.1" cross CrossVersion.for3Use2_13
+    val streamTestkit   = "com.typesafe.akka" %% "akka-stream-testkit" % version % Test cross CrossVersion.for3Use2_13
+    val testkit         = "com.typesafe.akka" %% "akka-testkit"        % version % Test cross CrossVersion.for3Use2_13
     val base            = Seq(stream, streamKafka)
     val test            = Seq(streamTestkit, testkit)
   }
