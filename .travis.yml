@@ -5,7 +5,7 @@ language: scala
 scala:
   - 3.1.1
 jdk:
-  - openjdk12
+  - openjdk17
 
 # Avoid triggering a duplicate build for PRs
 branches:
