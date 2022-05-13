@@ -35,7 +35,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
           .futureValue shouldBe Done
 
         val processedRecords = store.getRecords.futureValue.map(recordToTuple)
-        processedRecords should contain theSameElementsAs (recordsTopic1 ++ recordsTopic2)
+        processedRecords should contain theSameElementsAs recordsTopic1 ++ recordsTopic2
       }
     }
 
@@ -102,7 +102,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
         publishToKafka(testTopic1, recordsToPublish)
         moveOffsetToEnd(testTopic1)
 
-        val store = new RecordStore()
+        val store = new RecordStore
 
         TopicLoader
           .fromPartitions(LoadAll, topicPartitions, store.storeRecord, stringDeserializer)
@@ -114,7 +114,7 @@ class DeprecatedMethodsIntSpec extends IntegrationSpecBase {
     }
   }
 
-  class RecordStore()(implicit system: ActorSystem) {
+  class RecordStore(implicit system: ActorSystem) {
     private val storeActor = system.actorOf(Props(new Store))
 
     def storeRecord(rec: ConsumerRecord[String, String])(implicit timeout: Timeout): Future[Int] =

@@ -41,7 +41,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           publishToKafka(testTopic2, forTopic2)
 
           val loadedRecords = TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue
-          loadedRecords.map(recordToTuple) should contain theSameElementsAs (forTopic1 ++ forTopic2)
+          loadedRecords.map(recordToTuple) should contain theSameElementsAs forTopic1 ++ forTopic2
         }
       }
 

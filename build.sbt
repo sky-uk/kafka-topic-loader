@@ -29,8 +29,8 @@ tpolecatScalacOptions ++= Set(ScalacOptions.source3)
 
 ThisBuild / scalacOptions ++= Seq("-explaintypes") ++ {
   CrossVersion.partialVersion(scalaVersion.value) match {
-    case Some((3, _)) | Some((2, 13)) => Seq("-Wconf:msg=annotation:silent")
-    case _                            => Nil
+    case Some(3, _) | Some(2, 13) => Seq("-Wconf:msg=annotation:silent")
+    case _                        => Nil
   }
 }
 
@@ -46,8 +46,8 @@ ThisBuild / scalafixDependencies += Dependencies.Plugins.organizeImports
   */
 scalafixConfig           := {
   CrossVersion.partialVersion(scalaVersion.value) match {
-    case Some((3, _)) => Some((ThisBuild / baseDirectory).value / ".scalafix3.conf")
-    case _            => None
+    case Some(3, _) => Some((ThisBuild / baseDirectory).value / ".scalafix3.conf")
+    case _          => None
   }
 }
 
@@ -60,8 +60,8 @@ libraryDependencies ++= Dependencies.all
 
 excludeDependencies ++= {
   CrossVersion.partialVersion(scalaVersion.value) match {
-    case Some((3, _)) => Dependencies.scala3Exclusions
-    case _            => Seq.empty
+    case Some(3, _) => Dependencies.scala3Exclusions
+    case _          => Seq.empty
   }
 }
 
