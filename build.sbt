@@ -1,7 +1,6 @@
-lazy val scala3                 = "3.1.1"
+lazy val scala3                 = "3.1.2"
 lazy val scala213               = "2.13.8"
-lazy val scala212               = "2.12.15"
-lazy val supportedScalaVersions = List(scala3, scala213, scala212)
+lazy val supportedScalaVersions = List(scala3, scala213)
 lazy val scmUrl                 = "https://github.com/sky-uk/kafka-topic-loader"
 
 name                   := "kafka-topic-loader"
@@ -27,12 +26,7 @@ semanticdbVersion  := scalafixSemanticdb.revision
 
 tpolecatScalacOptions ++= Set(ScalacOptions.source3)
 
-ThisBuild / scalacOptions ++= Seq("-explaintypes") ++ {
-  CrossVersion.partialVersion(scalaVersion.value) match {
-    case Some((3, _)) | Some((2, 13)) => Seq("-Wconf:msg=annotation:silent")
-    case _                            => Nil
-  }
-}
+ThisBuild / scalacOptions ++= Seq("-explaintypes", "-Wconf:msg=annotation:silent")
 
 ThisBuild / scalafixDependencies += Dependencies.Plugins.organizeImports
 

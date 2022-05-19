@@ -10,6 +10,8 @@ As of version `1.3.0`, data can be loaded either from complete topics using `loa
 
 Since version `1.4.0` the library is cross compiled for scala versions `2.12` and `2.13`.
 
+Since version `1.6.0` the library is cross compiled for scala versions `2.12`, `2.13` and `3`.
+
 Add the following to your `build.sbt`:
 
 ```scala
