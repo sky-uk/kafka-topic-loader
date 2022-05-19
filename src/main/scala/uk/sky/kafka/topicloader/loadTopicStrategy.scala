@@ -1,4 +1,4 @@
-package com.sky.kafka.topicloader
+package uk.sky.kafka.topicloader
 
 sealed trait LoadTopicStrategy
 

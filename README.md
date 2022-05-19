@@ -19,7 +19,7 @@ libraryDependencies += "uk.sky" %% "kafka-topic-loader" % "<version>"
 ```
 
 ```scala
-import com.sky.kafka.topicloader.{LoadAll, TopicLoader}
+import uk.sky.kafka.topicloader.{LoadAll, TopicLoader}
 import org.apache.kafka.common.serialization.Deserializer}
 
 implicit val as: ActorSystem = ActorSystem()

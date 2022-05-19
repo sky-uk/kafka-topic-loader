@@ -1,4 +1,4 @@
-package com.sky.kafka.topicloader
+package uk.sky.kafka.topicloader
 
 import cats.data.ValidatedNec
 import cats.implicits._

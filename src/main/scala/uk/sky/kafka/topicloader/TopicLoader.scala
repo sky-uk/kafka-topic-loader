@@ -1,4 +1,4 @@
-package com.sky.kafka.topicloader
+package uk.sky.kafka.topicloader
 
 import java.lang.{Long => JLong}
 import java.util.{List => JList, Map => JMap, Optional}
@@ -14,11 +14,11 @@ import cats.syntax.bifunctor._
 import cats.syntax.option._
 import cats.syntax.show._
 import cats.{Bifunctor, Show}
-import com.sky.kafka.topicloader.config.{Config, TopicLoaderConfig}
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization._
+import uk.sky.kafka.topicloader.config.{Config, TopicLoaderConfig}
 
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
