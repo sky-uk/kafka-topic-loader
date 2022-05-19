@@ -41,7 +41,6 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
            |topic-loader {
            |  idle-timeout = 5 minutes
            |  buffer-size = 1000
-           |  parallelism = 5
            |}
            |akka {
            |  loglevel = "OFF"
