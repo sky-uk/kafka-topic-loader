@@ -7,10 +7,10 @@ import akka.stream.scaladsl.Sink
 import akka.util.Timeout
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
-import com.sky.kafka.topicloader._
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.TopicPartition
+import uk.sky.kafka.topicloader._
 
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters._
