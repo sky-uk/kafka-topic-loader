@@ -11,7 +11,6 @@ import cats.data.NonEmptyList
 import cats.syntax.option.*
 import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
-import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer

@@ -3,8 +3,8 @@ package uk.sky.kafka.topicloader.config
 import java.util.concurrent.TimeUnit
 
 import cats.data.{Validated, ValidatedNec}
-import cats.implicits._
-import com.typesafe.config.{Config => TypesafeConfig, ConfigException}
+import cats.implicits.*
+import com.typesafe.config.{Config as TypesafeConfig, ConfigException}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try

@@ -15,7 +15,6 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord, ConsumerRecords}
 import org.apache.kafka.clients.producer.{ProducerConfig, ProducerRecord}
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.serialization.Deserializer
 import org.scalatest.Assertion
 import org.scalatest.concurrent.Eventually
 import utils.RandomPort

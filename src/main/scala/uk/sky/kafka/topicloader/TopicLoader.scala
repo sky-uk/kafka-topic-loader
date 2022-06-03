@@ -1,7 +1,7 @@
 package uk.sky.kafka.topicloader
 
-import java.lang.{Long => JLong}
-import java.util.{List => JList, Map => JMap, Optional}
+import java.lang.Long as JLong
+import java.util.{List as JList, Map as JMap, Optional}
 
 import akka.Done
 import akka.actor.ActorSystem
@@ -10,18 +10,18 @@ import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.stream.OverflowStrategy
 import akka.stream.scaladsl.{Flow, Keep, Source}
 import cats.data.NonEmptyList
-import cats.syntax.bifunctor._
-import cats.syntax.option._
-import cats.syntax.show._
+import cats.syntax.bifunctor.*
+import cats.syntax.option.*
+import cats.syntax.show.*
 import cats.{Bifunctor, Show}
 import com.typesafe.scalalogging.LazyLogging
-import org.apache.kafka.clients.consumer._
+import org.apache.kafka.clients.consumer.*
 import org.apache.kafka.common.TopicPartition
-import org.apache.kafka.common.serialization._
+import org.apache.kafka.common.serialization.*
 import uk.sky.kafka.topicloader.config.{Config, TopicLoaderConfig}
 
 import scala.concurrent.Future
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 object TopicLoader extends TopicLoader {
   private[topicloader] case class LogOffsets(lowest: Long, highest: Long)
@@ -67,7 +67,7 @@ object TopicLoader extends TopicLoader {
 
 trait TopicLoader extends LazyLogging {
 
-  import TopicLoader._
+  import TopicLoader.*
 
   /** Source that loads the specified topics from the beginning and completes when the offsets reach the point specified
     * by the requested strategy. Materializes to a Future[Consumer.Control] where the Future represents the retrieval of
