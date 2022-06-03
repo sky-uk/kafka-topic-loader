@@ -108,7 +108,13 @@ trait TopicLoader extends LazyLogging {
       partition: TopicPartition,
       strategy: LoadTopicStrategy,
       maybeConsumerSettings: MaybeConsumerSettings = None
-  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = ???
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
+    val config =
+      Config
+        .loadOrThrow(system.settings.config)
+        .topicLoader
+    load(logOffsetsForPartition(partition, strategy), config, maybeConsumerSettings)
+  }
 
   /** Same as [[TopicLoader.loadAndRun]], but for a single partition. See
     * [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for how to get a partition assignment from Kafka.
@@ -118,10 +124,10 @@ trait TopicLoader extends LazyLogging {
       maybeConsumerSettings: MaybeConsumerSettings = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = ???
 
-  protected def logOffsetsForPartitions(topicPartitions: NonEmptyList[TopicPartition], strategy: LoadTopicStrategy)(
-      implicit system: ActorSystem
+  protected def logOffsetsForPartition(topicPartition: TopicPartition, strategy: LoadTopicStrategy)(implicit
+      system: ActorSystem
   ): Future[Map[TopicPartition, LogOffsets]] =
-    fetchLogOffsets(_ => topicPartitions.toList, strategy)
+    fetchLogOffsets(_ => List(topicPartition), strategy)
 
   protected def logOffsetsForTopics(topics: NonEmptyList[String], strategy: LoadTopicStrategy)(implicit
       system: ActorSystem
