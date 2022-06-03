@@ -92,16 +92,9 @@ trait TopicLoader extends LazyLogging {
       topics: NonEmptyList[String],
       maybeConsumerSettings: MaybeConsumerSettings = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
-    val config            = Config.loadOrThrow(system.settings.config).topicLoader
-    val logOffsetsF       = logOffsetsForTopics(topics, LoadAll)
-    val postLoadingSource = Source.futureSource(logOffsetsF.map { logOffsets =>
-      val highestOffsets = logOffsets.map { case (p, o) => p -> o.highest }
-      kafkaSource[K, V](highestOffsets, config, maybeConsumerSettings)
-    }(system.dispatcher))
-
-    load[K, V](logOffsetsF, config, maybeConsumerSettings)
-      .watchTermination()(Keep.right)
-      .concatMat(postLoadingSource)(Keep.both)
+    val config      = Config.loadOrThrow(system.settings.config).topicLoader
+    val logOffsetsF = logOffsetsForTopics(topics, LoadAll)
+    protectedLoadAndRun[K, V](logOffsetsF, config, maybeConsumerSettings)
   }
 
   def partitionedLoad[K : Deserializer, V : Deserializer](
@@ -122,7 +115,26 @@ trait TopicLoader extends LazyLogging {
   def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
       partition: TopicPartition,
       maybeConsumerSettings: MaybeConsumerSettings = None
-  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = ???
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
+    val config      = Config.loadOrThrow(system.settings.config).topicLoader
+    val logOffsetsF = logOffsetsForPartition(partition, LoadAll)
+    protectedLoadAndRun[K, V](logOffsetsF, config, maybeConsumerSettings)
+  }
+
+  protected def protectedLoadAndRun[K : Deserializer, V : Deserializer](
+      logOffsets: Future[Map[TopicPartition, LogOffsets]],
+      config: TopicLoaderConfig,
+      maybeConsumerSettings: MaybeConsumerSettings = None
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
+    val postLoadingSource = Source.futureSource(logOffsets.map { logOffsets =>
+      val highestOffsets = logOffsets.map { case (p, o) => p -> o.highest }
+      kafkaSource[K, V](highestOffsets, config, maybeConsumerSettings)
+    }(system.dispatcher))
+
+    load[K, V](logOffsets, config, maybeConsumerSettings)
+      .watchTermination()(Keep.right)
+      .concatMat(postLoadingSource)(Keep.both)
+  }
 
   protected def logOffsetsForPartition(topicPartition: TopicPartition, strategy: LoadTopicStrategy)(implicit
       system: ActorSystem

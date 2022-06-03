@@ -1,6 +1,7 @@
 package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
+
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.stream.scaladsl.{Keep, Sink}
@@ -250,24 +251,10 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
   }
 
   "partitionedLoad" should {
-//    {
-//      val topics                 = NonEmptyList.of(testTopic1, testTopic2)
-//      val (forPart1, forPart2) = records(1 to 15).splitAt(10)
-//
-//      withRunningKafka {
-//        createCustomTopics(topics)
-//
-//        publishToKafka(testTopic1, forPart1)
-//        publishToKafka(testTopic2, forPart2)
-//
-//        val loadedRecords = TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue
-//        loadedRecords.map(recordToTuple) should contain theSameElementsAs (forPart1 ++ forPart2)
-//      }
-//    }
 
     val strategy = LoadAll
 
-    "stream records only from required partitions" in new TestContext with KafkaConsumer {
+    "stream records only from required partitions" in new TestContext {
       val (forPart1, forPart2) = records(1 to 15).splitAt(10)
       val topics               = NonEmptyList.one(testTopic1)
       val topicPartition       = new TopicPartition(testTopic1, 1)
@@ -283,15 +270,40 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           publishToKafka(new ProducerRecord[String, String](testTopic1, 2, key, value))
         }
 
-        val loadedRecords = TopicLoader.partitionedLoad[String, String](topicPartition, strategy).runWith(Sink.seq).futureValue
+        val loadedRecords =
+          TopicLoader.partitionedLoad[String, String](topicPartition, strategy).runWith(Sink.seq).futureValue
         loadedRecords.map(recordToTuple) should contain theSameElementsAs forPart1
       }
     }
   }
 
   "partitionedLoadAndRun" should {
-    "do something" in new TestContext {
-      pending
+
+    "execute callback when finished loading a partition and keep streaming" in new TestContext {
+      val (preLoad, postLoad) = records(1 to 15).splitAt(10)
+      val topicPartition      = new TopicPartition(testTopic1, 1)
+
+      withRunningKafka {
+        createCustomTopic(testTopic1, partitions = 5)
+
+        preLoad.foreach { case (key, value) =>
+          publishToKafka(new ProducerRecord[String, String](testTopic1, 1, key, value))
+        }
+
+        val ((callback, _), recordsProbe) =
+          TopicLoader.partitionedLoadAndRun[String, String](topicPartition).toMat(TestSink.probe)(Keep.both).run()
+
+        recordsProbe.request(preLoad.size.toLong + postLoad.size.toLong)
+        recordsProbe.expectNextN(preLoad.size.toLong).map(recordToTuple) shouldBe preLoad
+
+        whenReady(callback) { _ =>
+          postLoad.foreach { case (key, value) =>
+            publishToKafka(new ProducerRecord[String, String](testTopic1, 1, key, value))
+          }
+
+          recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
+        }
+      }
     }
   }
 
