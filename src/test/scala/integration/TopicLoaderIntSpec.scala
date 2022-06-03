@@ -248,6 +248,14 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
     }
   }
 
+  "partitionedLoad" should {
+    pending
+  }
+
+  "partitionedLoadAndRun" should {
+    pending
+  }
+
   "consumerSettings" should {
     implicit val system: ActorSystem = ActorSystem("test")
 

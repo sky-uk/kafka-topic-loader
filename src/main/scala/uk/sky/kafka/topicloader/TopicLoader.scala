@@ -102,6 +102,14 @@ trait TopicLoader extends LazyLogging {
       .concatMat(postLoadingSource)(Keep.both)
   }
 
+  /** Same as [[TopicLoader.loadAndRun]], but for a single partition. See
+    * [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for how to get a partition assignment from Kafka.
+    */
+  def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
+      partition: TopicPartition,
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = ???
+
   protected def logOffsetsForPartitions(topicPartitions: NonEmptyList[TopicPartition], strategy: LoadTopicStrategy)(
       implicit system: ActorSystem
   ): Future[Map[TopicPartition, LogOffsets]] =
