@@ -261,14 +261,8 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
       withRunningKafka {
         createCustomTopics(topics, partitions = 5)
-
-        forPart1.foreach { case (key, value) =>
-          publishToKafka(new ProducerRecord[String, String](testTopic1, 1, key, value))
-        }
-
-        forPart2.foreach { case (key, value) =>
-          publishToKafka(new ProducerRecord[String, String](testTopic1, 2, key, value))
-        }
+        publishToKafka(testTopic1, 1, forPart1)
+        publishToKafka(testTopic1, 2, forPart2)
 
         val loadedRecords =
           TopicLoader.partitionedLoad[String, String](topicPartition, strategy).runWith(Sink.seq).futureValue
@@ -285,10 +279,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
       withRunningKafka {
         createCustomTopic(testTopic1, partitions = 5)
-
-        preLoad.foreach { case (key, value) =>
-          publishToKafka(new ProducerRecord[String, String](testTopic1, 1, key, value))
-        }
+        publishToKafka(testTopic1, 1, preLoad)
 
         val ((callback, _), recordsProbe) =
           TopicLoader.partitionedLoadAndRun[String, String](topicPartition).toMat(TestSink.probe)(Keep.both).run()
@@ -297,10 +288,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         recordsProbe.expectNextN(preLoad.size.toLong).map(recordToTuple) shouldBe preLoad
 
         whenReady(callback) { _ =>
-          postLoad.foreach { case (key, value) =>
-            publishToKafka(new ProducerRecord[String, String](testTopic1, 1, key, value))
-          }
-
+          publishToKafka(testTopic1, 1, postLoad)
           recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
         }
       }
