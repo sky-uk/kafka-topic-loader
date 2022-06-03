@@ -26,6 +26,8 @@ import scala.jdk.CollectionConverters._
 object TopicLoader extends TopicLoader {
   private[topicloader] case class LogOffsets(lowest: Long, highest: Long)
 
+  private type MaybeConsumerSettings = Option[ConsumerSettings[Array[Byte], Array[Byte]]]
+
   private case class HighestOffsetsWithRecord[K, V](
       partitionOffsets: Map[TopicPartition, Long],
       consumerRecord: Option[ConsumerRecord[K, V]] = none[ConsumerRecord[K, V]]
@@ -74,7 +76,7 @@ trait TopicLoader extends LazyLogging {
   def load[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
       strategy: LoadTopicStrategy,
-      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
+      maybeConsumerSettings: MaybeConsumerSettings = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
     val config =
       Config
@@ -88,7 +90,7 @@ trait TopicLoader extends LazyLogging {
     */
   def loadAndRun[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
-      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
+      maybeConsumerSettings: MaybeConsumerSettings = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
     val config            = Config.loadOrThrow(system.settings.config).topicLoader
     val logOffsetsF       = logOffsetsForTopics(topics, LoadAll)
@@ -102,12 +104,18 @@ trait TopicLoader extends LazyLogging {
       .concatMat(postLoadingSource)(Keep.both)
   }
 
+  def partitionedLoad[K : Deserializer, V : Deserializer](
+      partition: TopicPartition,
+      strategy: LoadTopicStrategy,
+      maybeConsumerSettings: MaybeConsumerSettings = None
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = ???
+
   /** Same as [[TopicLoader.loadAndRun]], but for a single partition. See
     * [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for how to get a partition assignment from Kafka.
     */
   def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
       partition: TopicPartition,
-      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
+      maybeConsumerSettings: MaybeConsumerSettings = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = ???
 
   protected def logOffsetsForPartitions(topicPartitions: NonEmptyList[TopicPartition], strategy: LoadTopicStrategy)(
@@ -159,7 +167,7 @@ trait TopicLoader extends LazyLogging {
   protected def load[K : Deserializer, V : Deserializer](
       logOffsets: Future[Map[TopicPartition, LogOffsets]],
       config: TopicLoaderConfig,
-      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
+      maybeConsumerSettings: MaybeConsumerSettings
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
 
     def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[ConsumerRecord[K, V], Consumer.Control] = {
@@ -200,7 +208,7 @@ trait TopicLoader extends LazyLogging {
   private def kafkaSource[K : Deserializer, V : Deserializer](
       startingOffsets: Map[TopicPartition, Long],
       config: TopicLoaderConfig,
-      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
+      maybeConsumerSettings: MaybeConsumerSettings
   )(implicit system: ActorSystem) =
     Consumer
       .plainSource(consumerSettings(maybeConsumerSettings), Subscriptions.assignmentWithOffset(startingOffsets))
@@ -208,7 +216,7 @@ trait TopicLoader extends LazyLogging {
       .map(cr => cr.bimap(_.deserialize[K](cr.topic), _.deserialize[V](cr.topic)))
 
   def consumerSettings(
-      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
+      maybeConsumerSettings: MaybeConsumerSettings
   )(implicit system: ActorSystem): ConsumerSettings[Array[Byte], Array[Byte]] =
     maybeConsumerSettings.getOrElse(
       ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
