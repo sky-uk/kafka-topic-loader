@@ -1,26 +1,27 @@
 package integration
 
-import java.util.concurrent.{TimeoutException => JavaTimeoutException}
-
+import java.util.concurrent.TimeoutException as JavaTimeoutException
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.stream.scaladsl.{Keep, Sink}
 import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
-import cats.syntax.option._
+import cats.syntax.option.*
 import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
-import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException}
+import org.apache.kafka.clients.producer.ProducerRecord
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
-import org.scalatest.prop.TableDrivenPropertyChecks._
+import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
 import uk.sky.kafka.topicloader.TopicLoader.consumerSettings
-import uk.sky.kafka.topicloader._
+import uk.sky.kafka.topicloader.*
 import uk.sky.kafka.topicloader.config.Config
 
 import scala.concurrent.Future
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 class TopicLoaderIntSpec extends IntegrationSpecBase {
 
@@ -249,11 +250,49 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
   }
 
   "partitionedLoad" should {
-    pending
+//    {
+//      val topics                 = NonEmptyList.of(testTopic1, testTopic2)
+//      val (forPart1, forPart2) = records(1 to 15).splitAt(10)
+//
+//      withRunningKafka {
+//        createCustomTopics(topics)
+//
+//        publishToKafka(testTopic1, forPart1)
+//        publishToKafka(testTopic2, forPart2)
+//
+//        val loadedRecords = TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue
+//        loadedRecords.map(recordToTuple) should contain theSameElementsAs (forPart1 ++ forPart2)
+//      }
+//    }
+
+    val strategy = LoadAll
+
+    "stream records only from required partitions" in new TestContext with KafkaConsumer {
+      val (forPart1, forPart2) = records(1 to 15).splitAt(10)
+      val topics               = NonEmptyList.one(testTopic1)
+      val topicPartition       = new TopicPartition(testTopic1, 1)
+
+      withRunningKafka {
+        createCustomTopics(topics, partitions = 5)
+
+        forPart1.foreach { case (key, value) =>
+          publishToKafka(new ProducerRecord[String, String](testTopic1, 1, key, value))
+        }
+
+        forPart2.foreach { case (key, value) =>
+          publishToKafka(new ProducerRecord[String, String](testTopic1, 2, key, value))
+        }
+
+        val loadedRecords = TopicLoader.partitionedLoad[String, String](topicPartition, strategy).runWith(Sink.seq).futureValue
+        loadedRecords.map(recordToTuple) should contain theSameElementsAs forPart1
+      }
+    }
   }
 
   "partitionedLoadAndRun" should {
-    pending
+    "do something" in new TestContext {
+      pending
+    }
   }
 
   "consumerSettings" should {
