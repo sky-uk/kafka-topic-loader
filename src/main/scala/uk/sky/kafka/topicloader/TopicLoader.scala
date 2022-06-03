@@ -94,7 +94,7 @@ trait TopicLoader extends LazyLogging {
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
     val config      = Config.loadOrThrow(system.settings.config).topicLoader
     val logOffsetsF = logOffsetsForTopics(topics, LoadAll)
-    protectedLoadAndRun[K, V](logOffsetsF, config, maybeConsumerSettings)
+    loadLogOffsetsAndRun[K, V](logOffsetsF, config, maybeConsumerSettings)
   }
 
   /** Same as [[TopicLoader.load]], but for a single partition. See
@@ -121,10 +121,10 @@ trait TopicLoader extends LazyLogging {
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
     val config      = Config.loadOrThrow(system.settings.config).topicLoader
     val logOffsetsF = logOffsetsForPartition(partition, LoadAll)
-    protectedLoadAndRun[K, V](logOffsetsF, config, maybeConsumerSettings)
+    loadLogOffsetsAndRun[K, V](logOffsetsF, config, maybeConsumerSettings)
   }
 
-  protected def protectedLoadAndRun[K : Deserializer, V : Deserializer](
+  protected def loadLogOffsetsAndRun[K : Deserializer, V : Deserializer](
       logOffsets: Future[Map[TopicPartition, LogOffsets]],
       config: TopicLoaderConfig,
       maybeConsumerSettings: MaybeConsumerSettings = None
