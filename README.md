@@ -18,27 +18,48 @@ Add the following to your `build.sbt`:
 libraryDependencies += "uk.sky" %% "kafka-topic-loader" % "<version>"
 ```
 
-```scala
-import uk.sky.kafka.topicloader.{LoadAll, TopicLoader}
-import org.apache.kafka.common.serialization.Deserializer}
+## Examples
 
-implicit val as: ActorSystem = ActorSystem()
+### Simple load
+
+```scala
+import akka.actor.ActorSystem
+import akka.stream.scaladsl.Sink
+import cats.data.NonEmptyList
+import org.apache.kafka.common.serialization.{Deserializer, StringDeserializer}
+import uk.sky.kafka.topicloader.{LoadAll, TopicLoader}
+
+implicit val system: ActorSystem                      = ActorSystem()
 implicit val stringDeserializer: Deserializer[String] = new StringDeserializer
 
-val stream = TopicLoader.load[String, String](NonEmptyList.one("topic-to-load"), LoadAll)
-      .mapAsync(1)(_ => ??? /* store records in akka.Actor for example */)
-      .runWith(Sink.ignore)
+val stream = TopicLoader
+  .load[String, String](NonEmptyList.one("topic-to-load"), LoadAll)
+  .mapAsync(1)(_ => ??? /* store records in akka.Actor for example */ )
+  .runWith(Sink.ignore)
 ```
+
+### Load and run
 
 `loadAndRun` will load the topics, complete the `Future[Done]` from the materialised value and then carry on
 running, emitting any new records that appear on the topics. An example use-case for this is a REST API that holds the
 contents of a Kafka topic in memory. This kind of application doesn't need to commit offsets and can use the `Future[Done]` to determine readiness.
 
 ```scala
+import akka.Done
+import akka.actor.ActorSystem
+import akka.kafka.scaladsl.Consumer
+import akka.stream.scaladsl.Sink
+import cats.data.NonEmptyList
+import org.apache.kafka.common.serialization.{ByteArrayDeserializer, Deserializer, StringDeserializer}
+import uk.sky.kafka.topicloader.TopicLoader
+
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import scala.concurrent.Future
+
 object Main extends App {
 
-  implicit val system = ActorSystem()
-  implicit val mat    = ActorMaterializer()
+  implicit val system: ActorSystem = ActorSystem()
 
   import system.dispatcher
 
@@ -54,20 +75,49 @@ object Main extends App {
       .run()
 
   initialLoadingFuture.foreach(_ => state.isAppReady.set(true))
+
+  class SimplifiedState {
+
+    /** API requests may query this state
+      */
+    val store = new ConcurrentHashMap[String, Array[Byte]]()
+
+    /** A readiness endpoint could be created that queries this
+      */
+    val isAppReady = new AtomicBoolean()
+  }
 }
+```
 
-class SimplifiedState {
+### Partitioned load
 
-  /**
-    * API requests may query this state
-    */
-  val store = new ConcurrentHashMap[String, Array[Byte]]()
+Data can also be loaded from specific partitions using `partitionedLoad`. By loading from specific partitions the topic
+loader can be used by multiple application instances with separate streams per set of partitions (see [Alpakka kafka](https://doc.akka.io/docs/akka-stream-kafka/current/consumer.html#source-per-partition) and below).
 
-  /**
-    * A readiness endpoint could be created that queries this
-    */
-  val isAppReady = new AtomicBoolean()
-}
+```scala
+import akka.actor.ActorSystem
+import akka.kafka.scaladsl.Consumer
+import akka.kafka.{ConsumerSettings, Subscriptions}
+import akka.stream.scaladsl.Source
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.serialization.{Deserializer, LongDeserializer, StringDeserializer}
+import uk.sky.kafka.topicloader.{LoadAll, TopicLoader}
+
+implicit val system: ActorSystem = ActorSystem()
+
+implicit val keyDeserializer: Deserializer[String] = new StringDeserializer
+implicit val longDeserializer: LongDeserializer    = new LongDeserializer()
+
+val consumerSettings: ConsumerSettings[String, Long] = ???
+
+val stream: Source[ConsumerRecord[String, Long], Consumer.Control] =
+  Consumer
+    .plainPartitionedSource(consumerSettings, Subscriptions.topics("topic-to-load"))
+    .flatMapConcat { case (topicPartition, source) =>
+      TopicLoader
+        .partitionedLoad[String, java.lang.Long](topicPartition, LoadAll)
+        .flatMapConcat(_ => source)
+    }
 ```
 
 ## Configuring your consumer group.id
@@ -86,28 +136,4 @@ akka.kafka {
     bootstrap.servers = ${?KAFKA_BROKERS}
   }
 }
-```
-
-## Source per partition
-
-This is deprecated in favour of a new API for partitioned loading which is coming soon.
-
-Data can also be loaded from specific partitions using `fromPartitions`. By loading from specific partitions the topic
-loader can be used by multiple application instances with separate streams per set of partitions (see [Alpakka kafka](https://doc.akka.io/docs/akka-stream-kafka/current/consumer.html#source-per-partition) and below).
-
-```scala
-implicit val system = ActorSystem()
-
-val consumerSettings: ConsumerSettings[String, Long]              = ???
-val doBusinessLogic: ConsumerRecord[String, Long] => Future[Unit] = ???
-
-val stream: Source[ConsumerMessage.CommittableMessage[String, Long], Consumer.Control] =
-  Consumer
-    .committablePartitionedSource(consumerSettings, Subscriptions.topics("topic-to-load"))
-    .flatMapConcat {
-      case (topicPartition, source) =>
-        TopicLoader
-          .fromPartitions(LoadAll, NonEmptyList.one(topicPartition), doBusinessLogic, new LongDeserializer())
-          .flatMapConcat(_ => source)
-    }
 ```
