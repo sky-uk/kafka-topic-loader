@@ -125,16 +125,16 @@ trait TopicLoader extends LazyLogging {
   }
 
   protected def loadLogOffsetsAndRun[K : Deserializer, V : Deserializer](
-      logOffsets: Future[Map[TopicPartition, LogOffsets]],
+      logOffsetsF: Future[Map[TopicPartition, LogOffsets]],
       config: TopicLoaderConfig,
       maybeConsumerSettings: MaybeConsumerSettings = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
-    val postLoadingSource = Source.futureSource(logOffsets.map { logOffsets =>
+    val postLoadingSource = Source.futureSource(logOffsetsF.map { logOffsets =>
       val highestOffsets = logOffsets.map { case (p, o) => p -> o.highest }
       kafkaSource[K, V](highestOffsets, config, maybeConsumerSettings)
     }(system.dispatcher))
 
-    load[K, V](logOffsets, config, maybeConsumerSettings)
+    load[K, V](logOffsetsF, config, maybeConsumerSettings)
       .watchTermination()(Keep.right)
       .concatMat(postLoadingSource)(Keep.both)
   }
