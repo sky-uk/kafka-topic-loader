@@ -30,7 +30,7 @@ import org.apache.kafka.common.serialization.{Deserializer, StringDeserializer}
 import uk.sky.kafka.topicloader.{LoadAll, TopicLoader}
 
 implicit val system: ActorSystem                      = ActorSystem()
-implicit val stringDeserializer: Deserializer[String] = new StringDeserializer
+implicit val stringDeserializer: Deserializer[String] = new StringDeserializer()
 
 val stream = TopicLoader
   .load[String, String](NonEmptyList.one("topic-to-load"), LoadAll)
@@ -63,8 +63,8 @@ object Main extends App {
 
   import system.dispatcher
 
-  implicit val keyDeserializer: Deserializer[String]        = new StringDeserializer
-  implicit val valueDeserializer: Deserializer[Array[Byte]] = new ByteArrayDeserializer
+  implicit val keyDeserializer: Deserializer[String]        = new StringDeserializer()
+  implicit val valueDeserializer: Deserializer[Array[Byte]] = new ByteArrayDeserializer()
 
   val state = new SimplifiedState
 
@@ -99,13 +99,14 @@ import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.stream.scaladsl.Source
+import cats.data.NonEmptyList
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.serialization.{Deserializer, LongDeserializer, StringDeserializer}
 import uk.sky.kafka.topicloader.{LoadAll, TopicLoader}
 
 implicit val system: ActorSystem = ActorSystem()
 
-implicit val keyDeserializer: Deserializer[String] = new StringDeserializer
+implicit val keyDeserializer: Deserializer[String] = new StringDeserializer()
 implicit val longDeserializer: LongDeserializer    = new LongDeserializer()
 
 val consumerSettings: ConsumerSettings[String, Long] = ???
@@ -115,7 +116,7 @@ val stream: Source[ConsumerRecord[String, Long], Consumer.Control] =
     .plainPartitionedSource(consumerSettings, Subscriptions.topics("topic-to-load"))
     .flatMapConcat { case (topicPartition, source) =>
       TopicLoader
-        .partitionedLoad[String, java.lang.Long](topicPartition, LoadAll)
+        .partitionedLoad[String, java.lang.Long](NonEmptyList.one(topicPartition), LoadAll)
         .flatMapConcat(_ => source)
     }
 ```
