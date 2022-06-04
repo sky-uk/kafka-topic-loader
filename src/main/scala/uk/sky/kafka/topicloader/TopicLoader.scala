@@ -97,7 +97,7 @@ trait TopicLoader extends LazyLogging {
     loadLogOffsetsAndRun[K, V](logOffsetsF, config, maybeConsumerSettings)
   }
 
-  /** Same as [[TopicLoader.load]], but for a single partition. See
+  /** Same as [[TopicLoader.load]], but for a specified partitions. See
     * [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for how to get a partition assignment from Kafka.
     */
   def partitionedLoad[K : Deserializer, V : Deserializer](
@@ -112,7 +112,7 @@ trait TopicLoader extends LazyLogging {
     load(logOffsetsForPartitions(partitions, strategy), config, maybeConsumerSettings)
   }
 
-  /** Same as [[TopicLoader.loadAndRun]], but for a single partition. See
+  /** Same as [[TopicLoader.loadAndRun]], but for a specified partitions. See
     * [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for how to get a partition assignment from Kafka.
     */
   def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
