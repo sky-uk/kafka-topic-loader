@@ -101,7 +101,7 @@ trait TopicLoader extends LazyLogging {
     * [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for how to get a partition assignment from Kafka.
     */
   def partitionedLoad[K : Deserializer, V : Deserializer](
-      partition: TopicPartition,
+      partitions: NonEmptyList[TopicPartition],
       strategy: LoadTopicStrategy,
       maybeConsumerSettings: MaybeConsumerSettings = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
@@ -109,18 +109,18 @@ trait TopicLoader extends LazyLogging {
       Config
         .loadOrThrow(system.settings.config)
         .topicLoader
-    load(logOffsetsForPartition(partition, strategy), config, maybeConsumerSettings)
+    load(logOffsetsForPartitions(partitions, strategy), config, maybeConsumerSettings)
   }
 
   /** Same as [[TopicLoader.loadAndRun]], but for a single partition. See
     * [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for how to get a partition assignment from Kafka.
     */
   def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
-      partition: TopicPartition,
+      partitions: NonEmptyList[TopicPartition],
       maybeConsumerSettings: MaybeConsumerSettings = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
     val config      = Config.loadOrThrow(system.settings.config).topicLoader
-    val logOffsetsF = logOffsetsForPartition(partition, LoadAll)
+    val logOffsetsF = logOffsetsForPartitions(partitions, LoadAll)
     loadLogOffsetsAndRun[K, V](logOffsetsF, config, maybeConsumerSettings)
   }
 
@@ -139,10 +139,10 @@ trait TopicLoader extends LazyLogging {
       .concatMat(postLoadingSource)(Keep.both)
   }
 
-  protected def logOffsetsForPartition(topicPartition: TopicPartition, strategy: LoadTopicStrategy)(implicit
-      system: ActorSystem
+  protected def logOffsetsForPartitions(topicPartitions: NonEmptyList[TopicPartition], strategy: LoadTopicStrategy)(
+      implicit system: ActorSystem
   ): Future[Map[TopicPartition, LogOffsets]] =
-    fetchLogOffsets(_ => List(topicPartition), strategy)
+    fetchLogOffsets(_ => topicPartitions.toList, strategy)
 
   protected def logOffsetsForTopics(topics: NonEmptyList[String], strategy: LoadTopicStrategy)(implicit
       system: ActorSystem
