@@ -255,17 +255,21 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
     "stream records only from required partitions" in new TestContext {
       val (forPart1, forPart2) = records(1 to 15).splitAt(10)
-      val topics               = NonEmptyList.one(testTopic1)
-      val topicPartition       = new TopicPartition(testTopic1, 1)
+      val topicPart1           = new TopicPartition(testTopic1, 1)
+      val topicPart2           = new TopicPartition(testTopic1, 2)
 
       withRunningKafka {
-        createCustomTopics(topics, partitions = 5)
+        createCustomTopic(testTopic1, partitions = 5)
         publishToKafka(testTopic1, 1, forPart1)
         publishToKafka(testTopic1, 2, forPart2)
 
-        val loadedRecords =
-          TopicLoader.partitionedLoad[String, String](topicPartition, strategy).runWith(Sink.seq).futureValue
-        loadedRecords.map(recordToTuple) should contain theSameElementsAs forPart1
+        val loadedForPart1 =
+          TopicLoader.partitionedLoad[String, String](topicPart1, strategy).runWith(Sink.seq).futureValue
+        loadedForPart1.map(recordToTuple) should contain theSameElementsAs forPart1
+
+        val loadedForPart2 =
+          TopicLoader.partitionedLoad[String, String](topicPart2, strategy).runWith(Sink.seq).futureValue
+        loadedForPart2.map(recordToTuple) should contain theSameElementsAs forPart2
       }
     }
   }
