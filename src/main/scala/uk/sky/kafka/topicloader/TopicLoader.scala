@@ -80,7 +80,7 @@ trait TopicLoader extends LazyLogging {
       Config
         .loadOrThrow(system.settings.config)
         .topicLoader
-    load(logOffsetsForTopics(topics, strategy), config, maybeConsumerSettings)
+    load(logOffsetsForTopics(topics, strategy, config), config, maybeConsumerSettings)
   }
 
   /** Source that loads the specified topics from the beginning. When the latest current offsets are reached, the
@@ -91,7 +91,7 @@ trait TopicLoader extends LazyLogging {
       maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
     val config            = Config.loadOrThrow(system.settings.config).topicLoader
-    val logOffsetsF       = logOffsetsForTopics(topics, LoadAll)
+    val logOffsetsF       = logOffsetsForTopics(topics, LoadAll, config)
     val postLoadingSource = Source.futureSource(logOffsetsF.map { logOffsets =>
       val highestOffsets = logOffsets.map { case (p, o) => p -> o.highest }
       kafkaSource[K, V](highestOffsets, config, maybeConsumerSettings)
@@ -102,12 +102,20 @@ trait TopicLoader extends LazyLogging {
       .concatMat(postLoadingSource)(Keep.both)
   }
 
-  protected def logOffsetsForPartitions(topicPartitions: NonEmptyList[TopicPartition], strategy: LoadTopicStrategy)(
-      implicit system: ActorSystem
+  protected def logOffsetsForPartitions(
+      topicPartitions: NonEmptyList[TopicPartition],
+      strategy: LoadTopicStrategy,
+      config: TopicLoaderConfig
+  )(implicit
+      system: ActorSystem
   ): Future[Map[TopicPartition, LogOffsets]] =
-    fetchLogOffsets(_ => topicPartitions.toList, strategy)
+    fetchLogOffsets(_ => topicPartitions.toList, strategy, config)
 
-  protected def logOffsetsForTopics(topics: NonEmptyList[String], strategy: LoadTopicStrategy)(implicit
+  protected def logOffsetsForTopics(
+      topics: NonEmptyList[String],
+      strategy: LoadTopicStrategy,
+      config: TopicLoaderConfig
+  )(implicit
       system: ActorSystem
   ): Future[Map[TopicPartition, LogOffsets]] = {
     val partitionsFromTopics: Consumer[Array[Byte], Array[Byte]] => List[TopicPartition] = c =>
@@ -115,12 +123,13 @@ trait TopicLoader extends LazyLogging {
         t <- topics.toList
         p <- c.partitionsFor(t).asScala
       } yield new TopicPartition(t, p.partition)
-    fetchLogOffsets(partitionsFromTopics, strategy)
+    fetchLogOffsets(partitionsFromTopics, strategy, config)
   }
 
   private def fetchLogOffsets(
       f: Consumer[Array[Byte], Array[Byte]] => List[TopicPartition],
-      strategy: LoadTopicStrategy
+      strategy: LoadTopicStrategy,
+      config: TopicLoaderConfig
   )(implicit system: ActorSystem): Future[Map[TopicPartition, LogOffsets]] = {
     def earliestOffsets(
         consumer: Consumer[Array[Byte], Array[Byte]],
@@ -133,7 +142,7 @@ trait TopicLoader extends LazyLogging {
     import system.dispatcher
 
     Future {
-      withStandaloneConsumer(consumerSettings(None)) { c =>
+      withStandaloneConsumer(consumerSettings(None, config)) { c =>
         val offsets          = offsetsFrom(f(c)) _
         val beginningOffsets = offsets(c.beginningOffsets)
         val endOffsets       = strategy match {
@@ -195,18 +204,23 @@ trait TopicLoader extends LazyLogging {
       maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
   )(implicit system: ActorSystem) =
     Consumer
-      .plainSource(consumerSettings(maybeConsumerSettings), Subscriptions.assignmentWithOffset(startingOffsets))
+      .plainSource(consumerSettings(maybeConsumerSettings, config), Subscriptions.assignmentWithOffset(startingOffsets))
       .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
       .map(cr => cr.bimap(_.deserialize[K](cr.topic), _.deserialize[V](cr.topic)))
 
   def consumerSettings(
-      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
-  )(implicit system: ActorSystem): ConsumerSettings[Array[Byte], Array[Byte]] =
-    maybeConsumerSettings.getOrElse(
-      ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]],
+      config: TopicLoaderConfig
+  )(implicit system: ActorSystem): ConsumerSettings[Array[Byte], Array[Byte]] = {
+    lazy val defaultSettings = {
+      val base = ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
         .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
         .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-    )
+      config.clientId.fold(base)(base.withClientId)
+    }
+
+    maybeConsumerSettings.getOrElse(defaultSettings)
+  }
 
   private def withStandaloneConsumer[T](
       settings: ConsumerSettings[Array[Byte], Array[Byte]]
