@@ -3,8 +3,8 @@ package uk.sky.kafka.topicloader.config
 import java.util.concurrent.TimeUnit
 
 import cats.data.{Validated, ValidatedNec}
-import cats.implicits._
-import com.typesafe.config.{Config => TypesafeConfig, ConfigException}
+import cats.implicits.*
+import com.typesafe.config.{Config as TypesafeConfig, ConfigException}
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
@@ -17,15 +17,14 @@ object PosInt {
   def apply(value: Int): Either[IllegalArgumentException, PosInt] =
     if (value > 0) new PosInt(value).asRight
     else new IllegalArgumentException(s"$value is not a positive Int").asLeft
-
-  val One = new PosInt(1)
 }
 
 final case class Config(topicLoader: TopicLoaderConfig)
 
 final case class TopicLoaderConfig(
     idleTimeout: FiniteDuration,
-    bufferSize: PosInt
+    bufferSize: PosInt,
+    clientId: Option[String]
 )
 
 object Config {
@@ -39,7 +38,12 @@ object Config {
     val bufferSize = PosInt(config.getInt(s"$basePath.buffer-size"))
       .validate(s"$basePath.buffer-size")
 
-    (idleTimeout, bufferSize).mapN(TopicLoaderConfig.apply).map(Config.apply)
+    val clientId = Try(
+      if (config.hasPath(s"$basePath.client-id")) Some(config.getString(s"$basePath.client-id"))
+      else None
+    ).validate(s"$basePath.client-id")
+
+    (idleTimeout, bufferSize, clientId).mapN(TopicLoaderConfig.apply).map(Config.apply)
   }
 
   def loadOrThrow(config: TypesafeConfig): Config = load(config) match {
