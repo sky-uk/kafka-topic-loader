@@ -72,11 +72,11 @@ class SimplifiedState {
 
 ## Configuration
 
-### Custom configuration
+### Topic loader
 
-The [`reference.conf`](src/main/resources/reference.conf) can be overridden by providing your own `application.conf`.
+The config in [`reference.conf`](src/main/resources/reference.conf) can be overridden by providing your own `application.conf`.
 
-By default, the `ConsumerConfig` will inherit akka's consumer `client.id` if none is specified. To customise the client id, provide it in your `application.conf`:
+By default, Akka's `ConsumerConfig` will inherit the consumer `client.id` from the application kafka-topic-loader is running from. To separate the client id of your application and the kafka-topic-loader, provide it in your `application.conf`:
 
 ```hocon
 topic-loader {
@@ -84,7 +84,7 @@ topic-loader {
 }
 ```
 
-### Configuring your consumer `group.id`
+### Akka-kafka
 
 You should configure the `akka.kafka.consumer.kafka-clients.group.id` to match that of your application, e.g.:
 
