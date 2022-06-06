@@ -98,7 +98,8 @@ trait TopicLoader extends LazyLogging {
   }
 
   /** Same as [[TopicLoader.load]], but for a specified partitions. See
-    * [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for how to get a partition assignment from Kafka.
+    * [[https://doc.akka.io/docs/alpakka-kafka/current/consumer.html#source-per-partition Akka's source per partition]]
+    * for how to get a partition assignment from Kafka.
     */
   def partitionedLoad[K : Deserializer, V : Deserializer](
       partitions: NonEmptyList[TopicPartition],
@@ -113,7 +114,8 @@ trait TopicLoader extends LazyLogging {
   }
 
   /** Same as [[TopicLoader.loadAndRun]], but for a specified partitions. See
-    * [[akka.kafka.scaladsl.Consumer.plainPartitionedSource]] for how to get a partition assignment from Kafka.
+    * [[https://doc.akka.io/docs/alpakka-kafka/current/consumer.html#source-per-partition Akka's source per partition]]
+    * for how to get a partition assignment from Kafka.
     */
   def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
       partitions: NonEmptyList[TopicPartition],

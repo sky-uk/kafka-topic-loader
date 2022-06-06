@@ -50,6 +50,8 @@ Test / fork              := true
 
 Global / onChangedBuildSource := ReloadOnSourceChanges
 
+Compile / doc / scalacOptions += "-no-link-warnings"
+
 libraryDependencies ++= Dependencies.all
 
 excludeDependencies ++= {
