@@ -153,7 +153,7 @@ abstract class IntegrationSpecBase extends UnitSpecBase {
           .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, autoCommit.toString)
           .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, offsetReset)
 
-      val settings = groupId.fold(baseSettings)(baseSettings.withProperty(ConsumerConfig.GROUP_ID_CONFIG, _))
+      val settings = groupId.fold(baseSettings)(baseSettings.withGroupId)
       settings.createKafkaConsumer()
     }
   }
