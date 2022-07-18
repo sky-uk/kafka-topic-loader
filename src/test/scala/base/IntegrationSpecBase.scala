@@ -2,18 +2,17 @@ package base
 
 import java.time.Duration
 import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.util.Timeout
 import cats.data.NonEmptyList
-import cats.syntax.option._
+import cats.syntax.option.*
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord, ConsumerRecords}
-import org.apache.kafka.clients.producer.ProducerConfig
+import org.apache.kafka.clients.producer.{ProducerConfig, ProducerRecord}
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.Assertion
 import org.scalatest.concurrent.Eventually
@@ -21,7 +20,7 @@ import utils.RandomPort
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.DurationInt
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
@@ -96,6 +95,11 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
       publishToKafka(topic, messages)
       publishToKafka(topic, filler)
     }
+
+    def publishToKafka(topic: String, partition: Int, messages: Seq[(String, String)]): Unit =
+      messages.foreach { case (k, v) =>
+        publishToKafka(new ProducerRecord[String, String](topic, partition, k, v))
+      }
   }
 
   trait KafkaConsumer { this: TestContext =>
