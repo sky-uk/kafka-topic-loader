@@ -4,6 +4,8 @@ import java.time.Duration
 import java.util.UUID
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
+import akka.kafka.scaladsl.Consumer as AkkaConsumer
+import akka.stream.scaladsl.{Sink, Source}
 import akka.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option.*
@@ -19,6 +21,7 @@ import org.scalatest.concurrent.Eventually
 import utils.RandomPort
 
 import scala.annotation.tailrec
+import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 
@@ -77,6 +80,14 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
     def records(r: Seq[Int]): Seq[(String, String)] = r.map(i => s"k$i" -> s"v$i")
 
     def recordToTuple[K, V](record: ConsumerRecord[K, V]): (K, V) = (record.key(), record.value())
+
+    def sourceFromPartition(
+        sources: Seq[(TopicPartition, Source[ConsumerRecord[String, String], Future[AkkaConsumer.Control]])],
+        partition: Int
+    ): Seq[ConsumerRecord[String, String]] =
+      sources.find { case (part, _) =>
+        part.partition() == partition
+      }.map { case (_, source) => source }.value.runWith(Sink.seq).futureValue
 
     val testTopic1          = "load-state-topic-1"
     val testTopic2          = "load-state-topic-2"

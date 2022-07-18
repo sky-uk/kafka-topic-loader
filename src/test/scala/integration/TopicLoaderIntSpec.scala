@@ -1,7 +1,6 @@
 package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
-
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.stream.scaladsl.{Keep, Sink}
@@ -72,15 +71,9 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
           val partitionedSources =
             TopicLoader.partitionedLoad[String, String](topics, strategy).take(2).runWith(Sink.seq).futureValue
-          println("Got partitioned sources")
 
-          def sourceFromPartition(partition: Int): Seq[(String, String)] =
-            partitionedSources.find { case (part, _) =>
-              part.partition() == partition
-            }.map { case (_, source) => source }.value.runWith(Sink.seq).futureValue.map(recordToTuple)
-
-          sourceFromPartition(0) should contain theSameElementsAs forPartition1
-          sourceFromPartition(1) should contain theSameElementsAs forPartition2
+          sourceFromPartition(partitionedSources, 0).map(recordToTuple) should contain theSameElementsAs forPartition1
+          sourceFromPartition(partitionedSources, 1).map(recordToTuple) should contain theSameElementsAs forPartition2
         }
       }
     }
