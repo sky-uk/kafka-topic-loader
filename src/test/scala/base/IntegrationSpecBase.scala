@@ -2,6 +2,7 @@ package base
 
 import java.time.Duration
 import java.util.UUID
+
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.kafka.scaladsl.Consumer as AkkaConsumer

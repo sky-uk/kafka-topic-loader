@@ -2,6 +2,7 @@ package uk.sky.kafka.topicloader
 
 import java.lang.Long as JLong
 import java.util.{List as JList, Map as JMap, Optional}
+
 import akka.Done
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer

@@ -1,8 +1,8 @@
 package integration
 
-import akka.Done
-
 import java.util.concurrent.TimeoutException as JavaTimeoutException
+
+import akka.Done
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.kafka.scaladsl.Consumer
