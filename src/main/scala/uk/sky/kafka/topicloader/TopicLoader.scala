@@ -107,6 +107,34 @@ trait TopicLoader extends LazyLogging {
       }
   }
 
+  def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
+      topics: NonEmptyList[String],
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
+  )(implicit
+      system: ActorSystem
+  ): Source[
+    (TopicPartition, Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])]),
+    Consumer.Control
+  ] = {
+    val config = Config.loadOrThrow(system.settings.config).topicLoader
+
+    Consumer
+      .plainPartitionedSource(
+        consumerSettings(maybeConsumerSettings, config),
+        Subscriptions.topics(topics.toList.toSet)
+      )
+      .map { case (partition, _) =>
+        (
+          partition,
+          loadAndRun(
+            logOffsetsForPartitions(NonEmptyList.one(partition), LoadAll, config),
+            config,
+            maybeConsumerSettings
+          )
+        )
+      }
+  }
+
   /** Source that loads the specified topics from the beginning. When the latest current offsets are reached, the
     * materialised value is completed, and the stream continues.
     */
@@ -114,16 +142,8 @@ trait TopicLoader extends LazyLogging {
       topics: NonEmptyList[String],
       maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
-    val config            = Config.loadOrThrow(system.settings.config).topicLoader
-    val logOffsetsF       = logOffsetsForTopics(topics, LoadAll, config)
-    val postLoadingSource = Source.futureSource(logOffsetsF.map { logOffsets =>
-      val highestOffsets = logOffsets.map { case (p, o) => p -> o.highest }
-      kafkaSource[K, V](highestOffsets, config, maybeConsumerSettings)
-    }(system.dispatcher))
-
-    load[K, V](logOffsetsF, config, maybeConsumerSettings)
-      .watchTermination()(Keep.right)
-      .concatMat(postLoadingSource)(Keep.both)
+    val config = Config.loadOrThrow(system.settings.config).topicLoader
+    loadAndRun(logOffsetsForTopics(topics, LoadAll, config), config, maybeConsumerSettings)
   }
 
   protected def logOffsetsForPartitions(
@@ -179,6 +199,21 @@ trait TopicLoader extends LazyLogging {
         }
       }
     }
+  }
+
+  protected def loadAndRun[K : Deserializer, V : Deserializer](
+      logOffsets: Future[Map[TopicPartition, LogOffsets]],
+      config: TopicLoaderConfig,
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
+  )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
+    val postLoadingSource = Source.futureSource(logOffsets.map { logOffsets =>
+      val highestOffsets = logOffsets.map { case (p, o) => p -> o.highest }
+      kafkaSource[K, V](highestOffsets, config, maybeConsumerSettings)
+    }(system.dispatcher))
+
+    load[K, V](logOffsets, config, maybeConsumerSettings)
+      .watchTermination()(Keep.right)
+      .concatMat(postLoadingSource)(Keep.both)
   }
 
   protected def load[K : Deserializer, V : Deserializer](

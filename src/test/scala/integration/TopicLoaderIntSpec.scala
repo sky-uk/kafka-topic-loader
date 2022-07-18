@@ -1,16 +1,20 @@
 package integration
 
+import akka.Done
+
 import java.util.concurrent.TimeoutException as JavaTimeoutException
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
+import akka.kafka.scaladsl.Consumer
 import akka.stream.scaladsl.{Keep, Sink}
+import akka.stream.testkit.TestSubscriber
 import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import cats.syntax.option.*
 import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
-import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks.*
@@ -263,6 +267,10 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
         }
       }
+    }
+
+    "execute callback when finished loading and keep streaming per partition" in new TestContext {
+      pending
     }
   }
 
