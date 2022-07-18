@@ -6,7 +6,7 @@ import java.util.concurrent.TimeoutException as JavaTimeoutException
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.kafka.scaladsl.Consumer
-import akka.stream.scaladsl.{Keep, Sink}
+import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.testkit.TestSubscriber
 import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
@@ -15,6 +15,7 @@ import cats.syntax.option.*
 import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks.*
@@ -270,7 +271,34 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
     }
 
     "execute callback when finished loading and keep streaming per partition" in new TestContext {
-      pending
+      val (preLoad, postLoad) = records(1 to 15).splitAt(10)
+
+      withRunningKafka {
+        createCustomTopic(testTopic1, partitions = 1)
+
+        publishToKafka(testTopic1, 0, preLoad)
+
+        val foo = TopicLoader
+          .partitionedLoadAndRun[String, String](NonEmptyList.one(testTopic1))
+          .take(1)
+          .runWith(Sink.seq)
+          .futureValue
+
+        foo.foreach { case (partition, source) =>
+          val ((callback, _), recordsProbe) = source.toMat(TestSink.probe)(Keep.both).run()
+
+          recordsProbe.request(preLoad.size.toLong + postLoad.size.toLong)
+          recordsProbe.expectNextN(preLoad.size.toLong).map(recordToTuple) shouldBe preLoad
+
+          whenReady(callback) { _ =>
+            publishToKafka(testTopic1, 0, postLoad)
+
+            recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
+          }
+
+        }
+
+      }
     }
   }
 
