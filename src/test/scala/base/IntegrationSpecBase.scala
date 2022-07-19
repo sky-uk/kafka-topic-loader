@@ -5,8 +5,6 @@ import java.util.UUID
 
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
-import akka.kafka.scaladsl.Consumer as AkkaConsumer
-import akka.stream.scaladsl.{Sink, Source}
 import akka.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option.*
@@ -22,7 +20,6 @@ import org.scalatest.concurrent.Eventually
 import utils.RandomPort
 
 import scala.annotation.tailrec
-import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 

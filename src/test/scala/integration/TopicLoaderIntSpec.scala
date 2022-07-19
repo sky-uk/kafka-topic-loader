@@ -7,7 +7,6 @@ import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.kafka.scaladsl.Consumer
 import akka.stream.scaladsl.{Keep, Sink, Source}
-import akka.stream.testkit.TestSubscriber
 import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
@@ -15,7 +14,6 @@ import cats.syntax.option.*
 import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
-import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks.*
@@ -280,10 +278,10 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
     "execute callback when finished loading and keep streaming per partition" in new TestContext {
       val (preLoadPart1, postLoadPart1) = records(1 to 15).splitAt(10)
       val (preLoadPart2, postLoadPart2) = records(16 to 30).splitAt(10)
-      val partitions                    = 2
+      val partitions: Long              = 2
 
       withRunningKafka {
-        createCustomTopic(testTopic1, partitions = partitions)
+        createCustomTopic(testTopic1, partitions = partitions.toInt)
 
         publishToKafka(testTopic1, 0, preLoadPart1)
         publishToKafka(testTopic1, 1, preLoadPart2)
