@@ -65,15 +65,16 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       "stream all records from all topics and emit a source per partition" in new TestContext {
         val topics                         = NonEmptyList.one(testTopic1)
         val (forPartition1, forPartition2) = records(1 to 15).splitAt(10)
+        val partitions: Long               = 2
 
         withRunningKafka {
-          createCustomTopics(topics, 2)
+          createCustomTopics(topics, partitions.toInt)
 
           publishToKafka(testTopic1, 0, forPartition1)
           publishToKafka(testTopic1, 1, forPartition2)
 
           val partitionedSources =
-            TopicLoader.partitionedLoad[String, String](topics, strategy).take(2).runWith(Sink.seq).futureValue
+            TopicLoader.partitionedLoad[String, String](topics, strategy).take(partitions).runWith(Sink.seq).futureValue
 
           sourceFromPartition(partitionedSources, 0)
             .runWith(Sink.seq)
