@@ -82,13 +82,10 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
 
     def recordToTuple[K, V](record: ConsumerRecord[K, V]): (K, V) = (record.key(), record.value())
 
-    def sourceFromPartition(
-        sources: Seq[(TopicPartition, Source[ConsumerRecord[String, String], Future[AkkaConsumer.Control]])],
+    def sourceFromPartition[T](
+        sources: Seq[(TopicPartition, T)],
         partition: Int
-    ): Seq[ConsumerRecord[String, String]] =
-      sources.find { case (part, _) =>
-        part.partition() == partition
-      }.map { case (_, source) => source }.value.runWith(Sink.seq).futureValue
+    ): T = sources.find { case (part, _) => part.partition() == partition }.map { case (_, source) => source }.value
 
     val testTopic1          = "load-state-topic-1"
     val testTopic2          = "load-state-topic-2"

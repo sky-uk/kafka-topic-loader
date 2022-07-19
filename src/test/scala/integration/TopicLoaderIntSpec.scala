@@ -77,8 +77,15 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           val partitionedSources =
             TopicLoader.partitionedLoad[String, String](topics, strategy).take(2).runWith(Sink.seq).futureValue
 
-          sourceFromPartition(partitionedSources, 0).map(recordToTuple) should contain theSameElementsAs forPartition1
-          sourceFromPartition(partitionedSources, 1).map(recordToTuple) should contain theSameElementsAs forPartition2
+          sourceFromPartition(partitionedSources, 0)
+            .runWith(Sink.seq)
+            .futureValue
+            .map(recordToTuple) should contain theSameElementsAs forPartition1
+
+          sourceFromPartition(partitionedSources, 1)
+            .runWith(Sink.seq)
+            .futureValue
+            .map(recordToTuple) should contain theSameElementsAs forPartition2
         }
       }
     }
@@ -271,33 +278,43 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
     }
 
     "execute callback when finished loading and keep streaming per partition" in new TestContext {
-      val (preLoad, postLoad) = records(1 to 15).splitAt(10)
+      val (preLoadPart1, postLoadPart1) = records(1 to 15).splitAt(10)
+      val (preLoadPart2, postLoadPart2) = records(16 to 30).splitAt(10)
+      val partitions                    = 2
 
       withRunningKafka {
-        createCustomTopic(testTopic1, partitions = 1)
+        createCustomTopic(testTopic1, partitions = partitions)
 
-        publishToKafka(testTopic1, 0, preLoad)
+        publishToKafka(testTopic1, 0, preLoadPart1)
+        publishToKafka(testTopic1, 1, preLoadPart2)
 
-        val foo = TopicLoader
+        val partitionedStream = TopicLoader
           .partitionedLoadAndRun[String, String](NonEmptyList.one(testTopic1))
-          .take(1)
+          .take(partitions)
           .runWith(Sink.seq)
           .futureValue
 
-        foo.foreach { case (partition, source) =>
+        def validate(
+            source: Source[ConsumerRecord[String, String], (Future[Done], Future[Consumer.Control])],
+            partition: Int,
+            preLoad: Seq[(String, String)],
+            postLoad: Seq[(String, String)]
+        ): Unit = {
+
           val ((callback, _), recordsProbe) = source.toMat(TestSink.probe)(Keep.both).run()
 
           recordsProbe.request(preLoad.size.toLong + postLoad.size.toLong)
           recordsProbe.expectNextN(preLoad.size.toLong).map(recordToTuple) shouldBe preLoad
 
           whenReady(callback) { _ =>
-            publishToKafka(testTopic1, 0, postLoad)
+            publishToKafka(testTopic1, partition, postLoad)
 
             recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
           }
-
         }
 
+        validate(sourceFromPartition(partitionedStream, 0), 0, preLoadPart1, postLoadPart1)
+        validate(sourceFromPartition(partitionedStream, 1), 1, preLoadPart2, postLoadPart2)
       }
     }
   }
