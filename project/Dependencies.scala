@@ -29,7 +29,7 @@ object Dependencies {
   val scalaCollectionCompat = "org.scala-lang.modules"     %% "scala-collection-compat" % "2.8.1"
 
   val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "3.2.1"  % Test cross CrossVersion.for3Use2_13
-  val scalaTest     = "org.scalatest"           %% "scalatest"      % "3.2.12" % Test
+  val scalaTest     = "org.scalatest"           %% "scalatest"      % "3.2.13" % Test
 
   val scala3Exclusions = Seq(
     "com.typesafe.scala-logging" % "scala-logging_2.13",
