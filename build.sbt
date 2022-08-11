@@ -25,6 +25,7 @@ semanticdbEnabled  := true
 semanticdbVersion  := scalafixSemanticdb.revision
 
 tpolecatScalacOptions ++= Set(ScalacOptions.source3)
+tpolecatScalacOptions ~= (_.filterNot(Set(ScalacOptions.warnValueDiscard)))
 
 ThisBuild / scalacOptions ++= Seq("-explaintypes", "-Wconf:msg=annotation:silent")
 

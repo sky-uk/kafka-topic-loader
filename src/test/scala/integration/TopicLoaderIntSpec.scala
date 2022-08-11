@@ -2,16 +2,18 @@ package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
-import akka.stream.scaladsl.{Keep, Sink}
+import akka.kafka.scaladsl.Consumer
+import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import cats.syntax.option.*
 import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
-import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks.*
@@ -57,6 +59,32 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
           val loadedRecords = TopicLoader.load[String, String](topics, strategy).runWith(Sink.seq).futureValue
           loadedRecords.map(recordToTuple) should contain theSameElementsAs published
+        }
+      }
+
+      "stream all records from all topics and emit a source per partition" in new TestContext {
+        val topics                         = NonEmptyList.one(testTopic1)
+        val (forPartition1, forPartition2) = records(1 to 15).splitAt(10)
+        val partitions: Long               = 2
+
+        withRunningKafka {
+          createCustomTopics(topics, partitions.toInt)
+
+          publishToKafka(testTopic1, 0, forPartition1)
+          publishToKafka(testTopic1, 1, forPartition2)
+
+          val partitionedSources =
+            TopicLoader.partitionedLoad[String, String](topics, strategy).take(partitions).runWith(Sink.seq).futureValue
+
+          sourceFromPartition(partitionedSources, 0)
+            .runWith(Sink.seq)
+            .futureValue
+            .map(recordToTuple) should contain theSameElementsAs forPartition1
+
+          sourceFromPartition(partitionedSources, 1)
+            .runWith(Sink.seq)
+            .futureValue
+            .map(recordToTuple) should contain theSameElementsAs forPartition2
         }
       }
     }
@@ -245,6 +273,47 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
           recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
         }
+      }
+    }
+
+    "execute callback when finished loading and keep streaming per partition" in new TestContext {
+      val (preLoadPart1, postLoadPart1) = records(1 to 15).splitAt(10)
+      val (preLoadPart2, postLoadPart2) = records(16 to 30).splitAt(10)
+      val partitions: Long              = 2
+
+      withRunningKafka {
+        createCustomTopic(testTopic1, partitions = partitions.toInt)
+
+        publishToKafka(testTopic1, 0, preLoadPart1)
+        publishToKafka(testTopic1, 1, preLoadPart2)
+
+        val partitionedStream = TopicLoader
+          .partitionedLoadAndRun[String, String](NonEmptyList.one(testTopic1))
+          .take(partitions)
+          .runWith(Sink.seq)
+          .futureValue
+
+        def validate(
+            source: Source[ConsumerRecord[String, String], (Future[Done], Future[Consumer.Control])],
+            partition: Int,
+            preLoad: Seq[(String, String)],
+            postLoad: Seq[(String, String)]
+        ): Unit = {
+
+          val ((callback, _), recordsProbe) = source.toMat(TestSink.probe)(Keep.both).run()
+
+          recordsProbe.request(preLoad.size.toLong + postLoad.size.toLong)
+          recordsProbe.expectNextN(preLoad.size.toLong).map(recordToTuple) shouldBe preLoad
+
+          whenReady(callback) { _ =>
+            publishToKafka(testTopic1, partition, postLoad)
+
+            recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
+          }
+        }
+
+        validate(sourceFromPartition(partitionedStream, 0), 0, preLoadPart1, postLoadPart1)
+        validate(sourceFromPartition(partitionedStream, 1), 1, preLoadPart2, postLoadPart2)
       }
     }
   }
