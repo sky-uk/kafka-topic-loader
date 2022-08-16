@@ -1,7 +1,7 @@
 package uk.sky.kafka.topicloader
 
 import cats.data.ValidatedNec
-import cats.implicits._
+import cats.implicits.*
 import com.typesafe.config.ConfigException
 
 import scala.util.Try

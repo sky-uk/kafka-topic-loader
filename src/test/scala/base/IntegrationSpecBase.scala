@@ -7,7 +7,7 @@ import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.util.Timeout
 import cats.data.NonEmptyList
-import cats.syntax.option._
+import cats.syntax.option.*
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
@@ -16,14 +16,13 @@ import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerReco
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
 import org.scalatest.Assertion
-import org.scalatest.concurrent.Eventually
 import utils.RandomPort
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.DurationInt
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
-abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
+abstract class IntegrationSpecBase extends UnitSpecBase {
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(20.seconds, 200.millis)
 
@@ -154,7 +153,7 @@ abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
           .withProperty(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, autoCommit.toString)
           .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, offsetReset)
 
-      val settings = groupId.fold(baseSettings)(baseSettings.withProperty(ConsumerConfig.GROUP_ID_CONFIG, _))
+      val settings = groupId.fold(baseSettings)(baseSettings.withGroupId)
       settings.createKafkaConsumer()
     }
   }
