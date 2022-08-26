@@ -1,7 +1,6 @@
 package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
-
 import akka.Done
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
@@ -14,6 +13,7 @@ import cats.syntax.option.*
 import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord}
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks.*
@@ -22,8 +22,12 @@ import uk.sky.kafka.topicloader.TopicLoader.consumerSettings
 import uk.sky.kafka.topicloader.*
 import uk.sky.kafka.topicloader.config.Config
 
+import java.util.concurrent.atomic.AtomicBoolean
+import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 import scala.concurrent.Future
 import scala.concurrent.duration.*
+import scala.util.{Failure, Success}
 
 class TopicLoaderIntSpec extends IntegrationSpecBase {
 
@@ -315,6 +319,101 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         validate(sourceFromPartition(partitionedStream, 0), 0, preLoadPart1, postLoadPart1)
         validate(sourceFromPartition(partitionedStream, 1), 1, preLoadPart2, postLoadPart2)
       }
+    }
+  }
+
+  "partitionedLoadAndRun" should {
+    "re-assign a partition to an stream and reload the topic if there are two instances and one of them is killed" in new TestContext {
+      // App 1 - partition 1
+      // App 2 - partition 2
+
+      // App 1 - killed mid load/run
+      // Assert - App 2 loads partition 2, but also when assigned partition 1 loads it up and continues running
+
+      // Setup - write to partition 1&2, load up both 1 and 2
+      // Kill app 1
+      // Verify app 2 loads the contents of partition 2, and after app 1 dies loads up partition 1
+
+      class App {
+        val state: TrieMap[String, String] = TrieMap[String, String]()
+
+        val loaded: AtomicBoolean = new AtomicBoolean()
+
+        val assignedPartitions: mutable.HashSet[TopicPartition] = mutable.HashSet[TopicPartition]()
+
+        def stream(topics: NonEmptyList[String]): Source[Future[Done], Consumer.Control] = TopicLoader
+          .partitionedLoadAndRun[String, String](topics)
+          .map { case (tp, source) =>
+            // Assign our partitions to set
+            assignedPartitions.add(tp)
+            println(s"Partition ${tp.partition()} was assigned")
+
+            // Put our elems in the store, and remove our tp from the set on revoke
+            val newSource =
+              source
+                .wireTap(cr => state.put(cr.key(), cr.value()))
+                .mapMaterializedValue { case (loadedF, controlF) =>
+                  loadedF.foreach(_ => loaded.set(true))
+                  (loadedF, controlF)
+                }
+                .watchTermination() { case ((f1, f2), f3) =>
+                  f3.onComplete {
+                    case Failure(exception) =>
+                      assignedPartitions.remove(tp)
+                      println(s"Partition $tp was revoked - failure")
+                    case Success(value)     =>
+                      assignedPartitions.remove(tp)
+                      println(s"Partition $tp was revoked - success")
+                  }
+
+                }
+
+            newSource.run()
+          }
+      }
+
+      val (preLoadPart1, postLoadPart1) = records(1 to 15).splitAt(10)
+      val (preLoadPart2, postLoadPart2) = records(16 to 30).splitAt(10)
+      val partitions: Long              = 2
+
+      withRunningKafka {
+        createCustomTopic(testTopic1, partitions = partitions.toInt)
+
+        publishToKafka(testTopic1, 0, preLoadPart1)
+        publishToKafka(testTopic1, 1, preLoadPart2)
+
+        // TODO - assert app 1 & 2 have the correct state
+        val app1: App = new App()
+        val app2: App = new App()
+
+        app1.stream(NonEmptyList.one(testTopic1)).run()
+//        app2.stream(NonEmptyList.one(testTopic1)).run()
+
+        eventually {
+          app1.loaded.get() shouldBe true
+          app1.state.toMap shouldBe (preLoadPart1 ++ preLoadPart2).toMap
+        }
+
+        app2.stream(NonEmptyList.one(testTopic1)).run()
+
+        eventually {
+          val app2AssignedPart = app2.assignedPartitions.loneElement.partition()
+          if (app2AssignedPart == 0) app2.state.toMap shouldBe preLoadPart1.toMap
+          else app2.state.toMap shouldBe preLoadPart2.toMap
+        }
+
+//        publishToKafka(testTopic1, 0, postLoadPart1)
+//        publishToKafka(testTopic1, 1, postLoadPart2)
+
+        // TODO - assert carried on loading
+
+        // TODO - kill app 1
+
+        // TODO - assert app 2 loaded up state that app 1, aka pre&post-load for part 1
+
+        // TODO publish to part 1 and 2 and assert app 2 gets both
+      }
+
     }
   }
 

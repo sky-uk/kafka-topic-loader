@@ -2,7 +2,6 @@ package base
 
 import java.time.Duration
 import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.util.Timeout
@@ -15,7 +14,7 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord, ConsumerRecords}
 import org.apache.kafka.clients.producer.{ProducerConfig, ProducerRecord}
 import org.apache.kafka.common.TopicPartition
-import org.scalatest.Assertion
+import org.scalatest.{Assertion, LoneElement}
 import org.scalatest.concurrent.Eventually
 import utils.RandomPort
 
@@ -23,7 +22,7 @@ import scala.annotation.tailrec
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 
-abstract class IntegrationSpecBase extends WordSpecBase with Eventually {
+abstract class IntegrationSpecBase extends WordSpecBase with Eventually with LoneElement {
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(20.seconds, 200.millis)
 
