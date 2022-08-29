@@ -59,8 +59,10 @@ object TopicLoader extends TopicLoader {
   private implicit val showLogOffsets: Show[LogOffsets] = o =>
     s"LogOffsets(lowest = ${o.lowest}, highest = ${o.highest})"
 
+  private implicit val showTopicPartition: Show[TopicPartition] = tp => s"${tp.topic}:${tp.partition}"
+
   private implicit val showTopicPartitions: Show[Iterable[TopicPartition]] =
-    _.map(tp => s"${tp.topic}:${tp.partition}").mkString(", ")
+    _.map(_.show).mkString(", ")
 }
 
 trait TopicLoader extends LazyLogging {
@@ -132,8 +134,8 @@ trait TopicLoader extends LazyLogging {
               .watchTermination() { case (mat, terminationF) =>
                 terminationF.onComplete(
                   _.fold(
-                    logger.error(s"Error occurred while loading data from ${Iterable(partition).show}", _),
-                    _ => logger.info(s"Successfully loaded data from ${Iterable(partition).show}")
+                    logger.error(s"Error occurred while loading data from ${partition.show}", _),
+                    _ => logger.info(s"Successfully loaded data from ${partition.show}")
                   )
                 )(system.dispatcher)
                 mat
@@ -158,21 +160,52 @@ trait TopicLoader extends LazyLogging {
   ] = {
     val config = Config.loadOrThrow(system.settings.config).topicLoader
 
-    Consumer
-      .plainPartitionedSource(
-        consumerSettings(maybeConsumerSettings, config),
-        Subscriptions.topics(topics.toList.toSet)
-      )
-      .map { case (partition, _) =>
-        (
-          partition,
-          loadAndRun(
-            logOffsetsForPartitions(NonEmptyList.one(partition), LoadAll, config),
-            config,
-            maybeConsumerSettings
-          )
-        )
+    def beginningOffsets(tps: Set[TopicPartition]): Map[TopicPartition, Long] =
+      withStandaloneConsumer(consumerSettings(None, config)) { c =>
+        offsetsFrom(tps.toList)(c.beginningOffsets)
       }
+
+    val partitionedSource =
+      Consumer
+        .plainPartitionedManualOffsetSource(
+          consumerSettings(maybeConsumerSettings, config),
+          Subscriptions.topics(topics.toList.toSet),
+          tps => Future(beginningOffsets(tps))(system.dispatcher)
+        )
+        .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
+        .idleTimeout(config.idleTimeout)
+        .map { case (partition, source) =>
+          val highest = withStandaloneConsumer(consumerSettings(None, config)) { c =>
+            val offsets          = offsetsFrom(List(partition)) _
+            val beginningOffsets = offsets(c.beginningOffsets)
+            val endOffsets       = offsets(c.endOffsets)
+
+            (partition, endOffsets(partition))
+          }
+
+          def endOffsets(tps: Set[TopicPartition]): Map[TopicPartition, Long] =
+            withStandaloneConsumer(consumerSettings(None, config)) { c =>
+              offsetsFrom(tps.toList)(c.endOffsets)
+            }
+
+          val newSource: Source[ConsumerRecord[K, V], Future[Done]] =
+            source
+              .idleTimeout(config.idleTimeout)
+              .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
+              .map(cr => cr.bimap(_.deserialize[K](cr.topic), _.deserialize[V](cr.topic)))
+              .watchTermination()(Keep.right)
+
+          (
+            partition,
+            newSource
+          )
+        }
+
+    val foo = partitionedLoad[K,V](topics, LoadAll, maybeConsumerSettings).watchTermination()(Keep.right)
+
+    val bar = foo.concatMat(partitionedSource)(Keep.both)
+
+    partitionedSource
   }
 
   /** Source that loads the specified topics from the beginning. When the latest current offsets are reached, the
