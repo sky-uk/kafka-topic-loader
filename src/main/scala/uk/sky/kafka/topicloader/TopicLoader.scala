@@ -144,7 +144,7 @@ trait TopicLoader extends LazyLogging {
             newSource.watchTermination()(Keep.right)
           )
         }
-    foo
+    partitionedSource
   }
 
   def partitionedLoadAndRun[K : Deserializer, V : Deserializer](
