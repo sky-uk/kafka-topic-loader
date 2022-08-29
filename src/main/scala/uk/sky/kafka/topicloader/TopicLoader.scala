@@ -2,8 +2,7 @@ package uk.sky.kafka.topicloader
 
 import java.lang.Long as JLong
 import java.util.{List as JList, Map as JMap, Optional}
-
-import akka.Done
+import akka.{Done, NotUsed}
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerSettings, Subscriptions}
@@ -89,6 +88,93 @@ trait TopicLoader extends LazyLogging {
       system: ActorSystem
   ): Source[(TopicPartition, Source[ConsumerRecord[K, V], Future[Consumer.Control]]), Consumer.Control] = {
     val config = Config.loadOrThrow(system.settings.config).topicLoader
+
+    def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[ConsumerRecord[K, V], Consumer.Control] = {
+      offsets.foreach { case (partition, offset) => logger.info(s"${offset.show} for $partition") }
+
+      val nonEmptyOffsets   = offsets.filter { case (_, o) => o.highest > o.lowest }
+      val lowestOffsets     = nonEmptyOffsets.map { case (p, o) => p -> o.lowest }
+      val allHighestOffsets =
+        HighestOffsetsWithRecord[K, V](nonEmptyOffsets.map { case (p, o) => p -> (o.highest - 1) })
+
+      val filterBelowHighestOffset =
+        Flow[ConsumerRecord[K, V]]
+          .scan(allHighestOffsets)(emitRecordRemovingConsumedPartition)
+          .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
+          .collect { case WithRecord(r) => r }
+
+      kafkaSource[K, V](lowestOffsets, config, maybeConsumerSettings)
+        .idleTimeout(config.idleTimeout)
+        .via(filterBelowHighestOffset)
+        .watchTermination() { case (mat, terminationF) =>
+          terminationF.onComplete(
+            _.fold(
+              logger.error(s"Error occurred while loading data from ${offsets.keys.show}", _),
+              _ => logger.info(s"Successfully loaded data from ${offsets.keys.show}")
+            )
+          )(system.dispatcher)
+          mat
+        }
+    }
+
+    def beginningOffsets(tps: Set[TopicPartition]): Map[TopicPartition, Long] =
+      withStandaloneConsumer(consumerSettings(None, config)) { c =>
+        offsetsFrom(tps.toList)(c.beginningOffsets)
+      }
+
+    Consumer
+      .plainPartitionedManualOffsetSource(
+        consumerSettings(maybeConsumerSettings, config),
+        Subscriptions.topics(topics.toList.toSet),
+        tps => Future(beginningOffsets(tps))(system.dispatcher)
+      )
+      .buffer(config.bufferSize.value, OverflowStrategy.backpressure)
+      .idleTimeout(config.idleTimeout)
+      .map { case (partition, source) =>
+        val logOffsets: Future[Map[TopicPartition, LogOffsets]] =
+          logOffsetsForPartitions(NonEmptyList.one(partition), strategy, config)
+
+        val highest = withStandaloneConsumer(consumerSettings(None, config)) { c =>
+          val offsets          = offsetsFrom(List(partition)) _
+          val beginningOffsets = offsets(c.beginningOffsets)
+          val endOffsets       = strategy match {
+            case LoadAll       => offsets(c.endOffsets)
+            case LoadCommitted => earliestOffsets(c, beginningOffsets)
+          }
+
+          (partition, endOffsets(partition))
+        }
+
+        val allHighestOffsets =
+          HighestOffsetsWithRecord[K, V](Map(highest).map { case (p, o) => p -> (o - 1) })
+
+        val filterBelowHighestOffset =
+          Flow[ConsumerRecord[K, V]]
+            .scan(allHighestOffsets)(emitRecordRemovingConsumedPartition)
+            .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
+            .collect { case WithRecord(r) => r }
+
+        val newSource =
+          source
+            .idleTimeout(config.idleTimeout)
+            .map(cr => cr.bimap(_.deserialize[K](cr.topic), _.deserialize[V](cr.topic)))
+            .via(filterBelowHighestOffset)
+            .watchTermination() { case (mat, terminationF) =>
+              terminationF.onComplete(
+                _.fold(
+                  logger.error(s"Error occurred while loading data from ${Iterable(partition).show}", _),
+                  _ => logger.info(s"Successfully loaded data from ${Iterable(partition).show}")
+                )
+              )(system.dispatcher)
+              mat
+            }
+
+        (
+          partition,
+          newSource
+        )
+      }
+
     Consumer
       .plainPartitionedSource(
         consumerSettings(maybeConsumerSettings, config),
@@ -176,14 +262,6 @@ trait TopicLoader extends LazyLogging {
       strategy: LoadTopicStrategy,
       config: TopicLoaderConfig
   )(implicit system: ActorSystem): Future[Map[TopicPartition, LogOffsets]] = {
-    def earliestOffsets(
-        consumer: Consumer[Array[Byte], Array[Byte]],
-        beginningOffsets: Map[TopicPartition, Long]
-    ): Map[TopicPartition, Long] =
-      beginningOffsets.map { case (p, o) =>
-        p -> Option(consumer.committed(Set(p).asJava).get(p)).fold(o)(_.offset)
-      }
-
     import system.dispatcher
 
     Future {
@@ -281,6 +359,14 @@ trait TopicLoader extends LazyLogging {
 
     maybeConsumerSettings.getOrElse(defaultSettings)
   }
+
+  private def earliestOffsets(
+      consumer: Consumer[Array[Byte], Array[Byte]],
+      beginningOffsets: Map[TopicPartition, Long]
+  ): Map[TopicPartition, Long] =
+    beginningOffsets.map { case (p, o) =>
+      p -> Option(consumer.committed(Set(p).asJava).get(p)).fold(o)(_.offset)
+    }
 
   private def withStandaloneConsumer[T](
       settings: ConsumerSettings[Array[Byte], Array[Byte]]

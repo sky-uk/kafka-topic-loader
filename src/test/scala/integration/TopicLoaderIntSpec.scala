@@ -2,9 +2,11 @@ package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
 import akka.Done
-import akka.actor.ActorSystem
-import akka.kafka.ConsumerSettings
+import akka.actor.{Actor, ActorLogging, ActorSystem}
+import akka.kafka.{ConsumerSettings, TopicPartitionsAssigned, TopicPartitionsRevoked}
 import akka.kafka.scaladsl.Consumer
+import akka.kafka.scaladsl.Consumer.DrainingControl
+import akka.stream.KillSwitches
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
@@ -258,68 +260,68 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
   "loadAndRun" should {
 
-    "execute callback when finished loading and keep streaming" in new TestContext {
-      val (preLoad, postLoad) = records(1 to 15).splitAt(10)
+//    "execute callback when finished loading and keep streaming" in new TestContext {
+//      val (preLoad, postLoad) = records(1 to 15).splitAt(10)
+//
+//      withRunningKafka {
+//        createCustomTopic(testTopic1)
+//
+//        publishToKafka(testTopic1, preLoad)
+//
+//        val ((callback, _), recordsProbe) =
+//          TopicLoader.loadAndRun[String, String](NonEmptyList.one(testTopic1)).toMat(TestSink.probe)(Keep.both).run()
+//
+//        recordsProbe.request(preLoad.size.toLong + postLoad.size.toLong)
+//        recordsProbe.expectNextN(preLoad.size.toLong).map(recordToTuple) shouldBe preLoad
+//
+//        whenReady(callback) { _ =>
+//          publishToKafka(testTopic1, postLoad)
+//
+//          recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
+//        }
+//      }
+//    }
 
-      withRunningKafka {
-        createCustomTopic(testTopic1)
-
-        publishToKafka(testTopic1, preLoad)
-
-        val ((callback, _), recordsProbe) =
-          TopicLoader.loadAndRun[String, String](NonEmptyList.one(testTopic1)).toMat(TestSink.probe)(Keep.both).run()
-
-        recordsProbe.request(preLoad.size.toLong + postLoad.size.toLong)
-        recordsProbe.expectNextN(preLoad.size.toLong).map(recordToTuple) shouldBe preLoad
-
-        whenReady(callback) { _ =>
-          publishToKafka(testTopic1, postLoad)
-
-          recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
-        }
-      }
-    }
-
-    "execute callback when finished loading and keep streaming per partition" in new TestContext {
-      val (preLoadPart1, postLoadPart1) = records(1 to 15).splitAt(10)
-      val (preLoadPart2, postLoadPart2) = records(16 to 30).splitAt(10)
-      val partitions: Long              = 2
-
-      withRunningKafka {
-        createCustomTopic(testTopic1, partitions = partitions.toInt)
-
-        publishToKafka(testTopic1, 0, preLoadPart1)
-        publishToKafka(testTopic1, 1, preLoadPart2)
-
-        val partitionedStream = TopicLoader
-          .partitionedLoadAndRun[String, String](NonEmptyList.one(testTopic1))
-          .take(partitions)
-          .runWith(Sink.seq)
-          .futureValue
-
-        def validate(
-            source: Source[ConsumerRecord[String, String], (Future[Done], Future[Consumer.Control])],
-            partition: Int,
-            preLoad: Seq[(String, String)],
-            postLoad: Seq[(String, String)]
-        ): Unit = {
-
-          val ((callback, _), recordsProbe) = source.toMat(TestSink.probe)(Keep.both).run()
-
-          recordsProbe.request(preLoad.size.toLong + postLoad.size.toLong)
-          recordsProbe.expectNextN(preLoad.size.toLong).map(recordToTuple) shouldBe preLoad
-
-          whenReady(callback) { _ =>
-            publishToKafka(testTopic1, partition, postLoad)
-
-            recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
-          }
-        }
-
-        validate(sourceFromPartition(partitionedStream, 0), 0, preLoadPart1, postLoadPart1)
-        validate(sourceFromPartition(partitionedStream, 1), 1, preLoadPart2, postLoadPart2)
-      }
-    }
+//    "execute callback when finished loading and keep streaming per partition" in new TestContext {
+//      val (preLoadPart1, postLoadPart1) = records(1 to 15).splitAt(10)
+//      val (preLoadPart2, postLoadPart2) = records(16 to 30).splitAt(10)
+//      val partitions: Long              = 2
+//
+//      withRunningKafka {
+//        createCustomTopic(testTopic1, partitions = partitions.toInt)
+//
+//        publishToKafka(testTopic1, 0, preLoadPart1)
+//        publishToKafka(testTopic1, 1, preLoadPart2)
+//
+//        val partitionedStream = TopicLoader
+//          .partitionedLoadAndRun[String, String](NonEmptyList.one(testTopic1))
+//          .take(partitions)
+//          .runWith(Sink.seq)
+//          .futureValue
+//
+//        def validate(
+//            source: Source[ConsumerRecord[String, String], (Future[Done], Future[Consumer.Control])],
+//            partition: Int,
+//            preLoad: Seq[(String, String)],
+//            postLoad: Seq[(String, String)]
+//        ): Unit = {
+//
+//          val ((callback, _), recordsProbe) = source.toMat(TestSink.probe)(Keep.both).run()
+//
+//          recordsProbe.request(preLoad.size.toLong + postLoad.size.toLong)
+//          recordsProbe.expectNextN(preLoad.size.toLong).map(recordToTuple) shouldBe preLoad
+//
+//          whenReady(callback) { _ =>
+//            publishToKafka(testTopic1, partition, postLoad)
+//
+//            recordsProbe.expectNextN(postLoad.size.toLong).map(recordToTuple) shouldBe postLoad
+//          }
+//        }
+//
+//        validate(sourceFromPartition(partitionedStream, 0), 0, preLoadPart1, postLoadPart1)
+//        validate(sourceFromPartition(partitionedStream, 1), 1, preLoadPart2, postLoadPart2)
+//      }
+//    }
   }
 
   "partitionedLoadAndRun" should {
@@ -334,7 +336,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       // Kill app 1
       // Verify app 2 loads the contents of partition 2, and after app 1 dies loads up partition 1
 
-      class App {
+      class App(name: String) {
         val state: TrieMap[String, String] = TrieMap[String, String]()
 
         val loaded: AtomicBoolean = new AtomicBoolean()
@@ -346,29 +348,22 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           .map { case (tp, source) =>
             // Assign our partitions to set
             assignedPartitions.add(tp)
-            println(s"Partition ${tp.partition()} was assigned")
+            println(s"Partition $tp was assigned to $name")
 
             // Put our elems in the store, and remove our tp from the set on revoke
-            val newSource =
-              source
-                .wireTap(cr => state.put(cr.key(), cr.value()))
-                .mapMaterializedValue { case (loadedF, controlF) =>
-                  loadedF.foreach(_ => loaded.set(true))
-                  (loadedF, controlF)
-                }
-                .watchTermination() { case ((f1, f2), f3) =>
-                  f3.onComplete {
-                    case Failure(exception) =>
-                      assignedPartitions.remove(tp)
-                      println(s"Partition $tp was revoked - failure")
-                    case Success(value)     =>
-                      assignedPartitions.remove(tp)
-                      println(s"Partition $tp was revoked - success")
-                  }
-
-                }
-
-            newSource.run()
+            val newSource = source.map { cr =>
+              println(s"Got record: ${cr.key()}, ${cr.value()}")
+              state.put(cr.key(), cr.value())
+              cr
+            }
+              .watchTermination() { case ((f1, f2), f3) =>
+                f1.onComplete(_ => println(s"$name - f1 - onComplete for $tp"))
+                f2.onComplete(_ => println(s"$name - f2 - onComplete for $tp"))
+                f3.onComplete(_ => println(s"$name - f3 - onComplete for $tp"))
+              }
+              .runWith(Sink.ignore)
+            newSource.onComplete(_ => println("Outer oncomplete"))
+            newSource
           }
       }
 
@@ -383,10 +378,14 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         publishToKafka(testTopic1, 1, preLoadPart2)
 
         // TODO - assert app 1 & 2 have the correct state
-        val app1: App = new App()
-        val app2: App = new App()
+        val app1: App = new App("app1")
+        val app2: App = new App("app2")
 
-        app1.stream(NonEmptyList.one(testTopic1)).run()
+        val (f1, f2) = app1
+          .stream(NonEmptyList.one(testTopic1))
+          .toMat(Sink.ignore)(Keep.both)
+          .run()
+
 //        app2.stream(NonEmptyList.one(testTopic1)).run()
 
         eventually {
@@ -394,7 +393,10 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           app1.state.toMap shouldBe (preLoadPart1 ++ preLoadPart2).toMap
         }
 
-        app2.stream(NonEmptyList.one(testTopic1)).run()
+        val foo = app2
+          .stream(NonEmptyList.one(testTopic1))
+          .toMat(Sink.ignore)(Keep.both)
+          .run()
 
         eventually {
           val app2AssignedPart = app2.assignedPartitions.loneElement.partition()
@@ -402,9 +404,13 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           else app2.state.toMap shouldBe preLoadPart2.toMap
         }
 
-//        publishToKafka(testTopic1, 0, postLoadPart1)
-//        publishToKafka(testTopic1, 1, postLoadPart2)
+        publishToKafka(testTopic1, 0, postLoadPart1)
+        publishToKafka(testTopic1, 1, postLoadPart2)
 
+        eventually {
+          app1.state.toMap shouldBe (preLoadPart1 ++ preLoadPart2 ++ postLoadPart1).toMap
+//          app2.state.toMap shouldBe (preLoadPart2 ++ postLoadPart2).toMap
+        }
         // TODO - assert carried on loading
 
         // TODO - kill app 1
