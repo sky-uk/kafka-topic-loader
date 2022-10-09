@@ -28,7 +28,7 @@ object Dependencies {
   val logbackClassic        = "ch.qos.logback"              % "logback-classic"         % "1.4.3" % Runtime
   val scalaCollectionCompat = "org.scala-lang.modules"     %% "scala-collection-compat" % "2.8.1"
 
-  val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "3.2.2"  % Test cross CrossVersion.for3Use2_13
+  val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % "3.2.3"  % Test cross CrossVersion.for3Use2_13
   val scalaTest     = "org.scalatest"           %% "scalatest"      % "3.2.14" % Test
 
   val scala3Exclusions = Seq(
