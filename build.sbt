@@ -38,7 +38,7 @@ ThisBuild / scalafixDependencies += Dependencies.Plugins.organizeImports
   *
   * ProcedureSyntax doesn't exist in Scala 3 - https://scalacenter.github.io/scalafix/docs/rules/ProcedureSyntax.html
   */
-scalafixConfig           := {
+scalafixConfig := {
   CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((3, _)) => Some((ThisBuild / baseDirectory).value / ".scalafix3.conf")
     case _            => None
