@@ -24,7 +24,7 @@ crossScalaVersions := supportedScalaVersions
 semanticdbEnabled  := true
 semanticdbVersion  := scalafixSemanticdb.revision
 
-tpolecatScalacOptions ++= Set(ScalacOptions.source3)
+tpolecatScalacOptions ~= { _.filterNot(Set(ScalacOptions.warnValueDiscard)) ++ Set(ScalacOptions.source3) }
 
 ThisBuild / scalacOptions ++= Seq("-explaintypes", "-Wconf:msg=annotation:silent")
 
