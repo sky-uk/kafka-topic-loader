@@ -99,11 +99,11 @@ abstract class IntegrationSpecBase extends UnitSpecBase {
       publishToKafka(topic, filler)
     }
 
-    def errorSink(
+    def errorSink[V](
         errorKey: String,
         onError: Future[Unit] = Future.failed(new Exception("Boom!"))
-    ): Sink[ConsumerRecord[String, ?], Future[Done]] =
-      Sink.foreachAsync[ConsumerRecord[String, ?]](1) { message =>
+    ): Sink[ConsumerRecord[String, V], Future[Done]] =
+      Sink.foreachAsync[ConsumerRecord[String, V]](1) { message =>
         if (message.key == errorKey) onError
         else Future.unit
       }
