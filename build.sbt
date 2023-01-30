@@ -1,4 +1,4 @@
-lazy val scala3                 = "3.2.1"
+lazy val scala3                 = "3.2.2"
 lazy val scala213               = "2.13.10"
 lazy val supportedScalaVersions = List(scala3, scala213)
 lazy val scmUrl                 = "https://github.com/sky-uk/kafka-topic-loader"
