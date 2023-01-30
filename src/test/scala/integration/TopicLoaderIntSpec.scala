@@ -1,6 +1,7 @@
 package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
+
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.{Keep, Sink}
 import akka.stream.testkit.scaladsl.TestSink
@@ -13,6 +14,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
 import uk.sky.kafka.topicloader.*
 import utils.MockTopicLoaderMetrics
+import utils.MockTopicLoaderMetrics.{ErrorLoading, Loaded, Loading, NotStarted}
 
 import scala.concurrent.Future
 
@@ -147,11 +149,11 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
     "with custom metrics" should {
 
-      "emit metrics on a consumer record received" in new TestContext {
+      val strategy = LoadAll
 
+      "emit metrics on a consumer record received" in new TestContext {
         val mockTopicLoaderMetrics = new MockTopicLoaderMetrics()
 
-        val strategy               = LoadAll
         val topics                 = NonEmptyList.of(testTopic1, testTopic2)
         val allRecords             = records(1 to 15)
         val (forTopic1, forTopic2) = allRecords.splitAt(10)
@@ -164,10 +166,61 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
           TopicLoader
             .load[String, String](topics, strategy, topicLoaderMetrics = mockTopicLoaderMetrics)
-            .runWith(Sink.seq)
-            .futureValue
+            .run()
 
-          mockTopicLoaderMetrics.recordCounter.get() shouldBe allRecords.length
+          eventually {
+            mockTopicLoaderMetrics.recordCounter.get() shouldBe allRecords.length
+          }
+        }
+      }
+
+      "emit a State of Loaded once the stream has completed" in new TestContext {
+        val mockTopicLoaderMetrics = new MockTopicLoaderMetrics()
+
+        val topics                 = NonEmptyList.of(testTopic1, testTopic2)
+        val allRecords             = records(1 to 15)
+        val (forTopic1, forTopic2) = allRecords.splitAt(10)
+
+        withRunningKafka {
+          createCustomTopics(topics)
+
+          publishToKafka(testTopic1, forTopic1)
+          publishToKafka(testTopic2, forTopic2)
+
+          mockTopicLoaderMetrics.loadingState.get() shouldBe NotStarted
+
+          TopicLoader
+            .load[String, String](topics, strategy, topicLoaderMetrics = mockTopicLoaderMetrics)
+            .runWith(Sink.foreach { _ =>
+              mockTopicLoaderMetrics.loadingState.get() shouldBe Loading
+            })
+
+          eventually {
+            mockTopicLoaderMetrics.loadingState.get() shouldBe Loaded
+          }
+        }
+      }
+
+      "emit a State of LoadingError if the stream fails" in new TestContext {
+        val mockTopicLoaderMetrics = new MockTopicLoaderMetrics()
+
+        val published    = records(1 to 10)
+        val explodingKey = published.drop(5).head._1
+
+        withRunningKafka {
+          createCustomTopic(testTopic1)
+          publishToKafka(testTopic1, published)
+
+          TopicLoader
+            .load[String, String](NonEmptyList.one(testTopic1), strategy, topicLoaderMetrics = mockTopicLoaderMetrics)
+            .runWith(Sink.foreachAsync(1) { message =>
+              if (message.key == explodingKey) Future.failed(new Exception("Boom!"))
+              else Future.unit
+            })
+
+          eventually {
+            mockTopicLoaderMetrics.loadingState.get() shouldBe ErrorLoading
+          }
         }
       }
     }
@@ -227,11 +280,8 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           TopicLoader
             .load[String, String](NonEmptyList.one(testTopic1), LoadAll)
             .runWith(Sink.foreachAsync(1) { message =>
-              if (message.key == timingOutKey) {
-                Future.never
-              } else {
-                Future.unit
-              }
+              if (message.key == timingOutKey) Future.never
+              else Future.unit
             })
             .failed
             .futureValue shouldBe a[JavaTimeoutException]
@@ -247,6 +297,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
   "loadAndRun" should {
 
     "execute callback when finished loading and keep streaming" in new TestContext {
+
       val (preLoad, postLoad) = records(1 to 15).splitAt(10)
 
       withRunningKafka {
@@ -267,6 +318,60 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         }
       }
     }
+
+    "with custom metrics" should {
+
+      "emit a State of Loaded when finished loading" in new TestContext {
+        val mockTopicLoaderMetrics = new MockTopicLoaderMetrics()
+
+        val preLoad = records(1 to 15)
+
+        withRunningKafka {
+          createCustomTopic(testTopic1)
+
+          publishToKafka(testTopic1, preLoad)
+
+          val ((callback, _), _) =
+            TopicLoader
+              .loadAndRun[String, String](NonEmptyList.one(testTopic1), topicLoaderMetrics = mockTopicLoaderMetrics)
+              .toMat(Sink.ignore)(Keep.both)
+              .run()
+
+          whenReady(callback) { _ =>
+            mockTopicLoaderMetrics.loadingState.get() shouldBe Loaded
+          }
+        }
+      }
+
+      "emit a State of Error if the initial loading callback fails" in new TestContext {
+        val mockTopicLoaderMetrics = new MockTopicLoaderMetrics()
+
+        val preLoad      = records(1 to 15)
+        val explodingKey = preLoad.drop(5).head._1
+
+        withRunningKafka {
+          createCustomTopic(testTopic1)
+
+          publishToKafka(testTopic1, preLoad)
+
+          val ((callback, _), _) =
+            TopicLoader
+              .loadAndRun[String, String](NonEmptyList.one(testTopic1), topicLoaderMetrics = mockTopicLoaderMetrics)
+              .toMat(Sink.foreachAsync(1) { message =>
+                if (message.key == explodingKey) Future.failed(new Exception("Boom!"))
+                else Future.unit
+              })(Keep.both)
+              .run()
+
+          eventually {
+            callback.failed
+
+            mockTopicLoaderMetrics.loadingState.get() shouldBe ErrorLoading
+          }
+        }
+      }
+    }
+
   }
 
 }

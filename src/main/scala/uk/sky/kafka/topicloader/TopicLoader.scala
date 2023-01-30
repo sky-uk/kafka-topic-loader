@@ -2,6 +2,7 @@ package uk.sky.kafka.topicloader
 
 import java.lang.Long as JLong
 import java.util.{List as JList, Map as JMap, Optional}
+
 import akka.Done
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
@@ -187,13 +188,13 @@ trait TopicLoader extends LazyLogging {
         .watchTermination() { case (mat, terminationF) =>
           terminationF.onComplete(
             _.fold(
-              {
+              e => {
+                logger.error(s"Error occurred while loading data from ${offsets.keys.show}", e)
                 topicLoaderMetrics.onError()
-                logger.error(s"Error occurred while loading data from ${offsets.keys.show}", _)
               },
               _ => {
-                topicLoaderMetrics.onLoaded()
                 logger.info(s"Successfully loaded data from ${offsets.keys.show}")
+                topicLoaderMetrics.onLoaded()
               }
             )
           )(system.dispatcher)
