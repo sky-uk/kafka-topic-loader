@@ -187,13 +187,15 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           publishToKafka(testTopic1, forTopic1)
           publishToKafka(testTopic2, forTopic2)
 
+          val loadF =
+            TopicLoader
+              .load[String, String](topics, strategy, topicLoaderMetrics = mockTopicLoaderMetrics)
+
           mockTopicLoaderMetrics.loadingState.get() shouldBe NotStarted
 
-          TopicLoader
-            .load[String, String](topics, strategy, topicLoaderMetrics = mockTopicLoaderMetrics)
-            .runWith(Sink.foreach { _ =>
-              mockTopicLoaderMetrics.loadingState.get() shouldBe Loading
-            })
+          loadF.runWith(Sink.foreach { _ =>
+            mockTopicLoaderMetrics.loadingState.get() shouldBe Loading
+          })
 
           eventually {
             mockTopicLoaderMetrics.loadingState.get() shouldBe Loaded
