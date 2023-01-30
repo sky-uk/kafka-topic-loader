@@ -2,7 +2,6 @@ package uk.sky.kafka.topicloader
 
 import java.lang.Long as JLong
 import java.util.{List as JList, Map as JMap, Optional}
-
 import akka.Done
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
@@ -19,6 +18,7 @@ import org.apache.kafka.clients.consumer.*
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.*
 import uk.sky.kafka.topicloader.config.{Config, TopicLoaderConfig}
+import uk.sky.kafka.topicloader.metrics.TopicLoaderMetrics
 
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
@@ -74,13 +74,12 @@ trait TopicLoader extends LazyLogging {
   def load[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
       strategy: LoadTopicStrategy,
-      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None,
+      topicLoaderMetrics: TopicLoaderMetrics = TopicLoaderMetrics.noOp()
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
-    val config =
-      Config
-        .loadOrThrow(system.settings.config)
-        .topicLoader
-    load(logOffsetsForTopics(topics, strategy, config), config, maybeConsumerSettings)
+    val config = Config.loadOrThrow(system.settings.config).topicLoader
+
+    load(logOffsetsForTopics(topics, strategy, config), config, maybeConsumerSettings, topicLoaderMetrics)
   }
 
   /** Source that loads the specified topics from the beginning. When the latest current offsets are reached, the
@@ -88,7 +87,8 @@ trait TopicLoader extends LazyLogging {
     */
   def loadAndRun[K : Deserializer, V : Deserializer](
       topics: NonEmptyList[String],
-      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None,
+      topicLoaderMetrics: TopicLoaderMetrics = TopicLoaderMetrics.noOp()
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
     val config            = Config.loadOrThrow(system.settings.config).topicLoader
     val logOffsetsF       = logOffsetsForTopics(topics, LoadAll, config)
@@ -97,7 +97,7 @@ trait TopicLoader extends LazyLogging {
       kafkaSource[K, V](highestOffsets, config, maybeConsumerSettings)
     }(system.dispatcher))
 
-    load[K, V](logOffsetsF, config, maybeConsumerSettings)
+    load[K, V](logOffsetsF, config, maybeConsumerSettings, topicLoaderMetrics)
       .watchTermination()(Keep.right)
       .concatMat(postLoadingSource)(Keep.both)
   }
@@ -160,7 +160,8 @@ trait TopicLoader extends LazyLogging {
   protected def load[K : Deserializer, V : Deserializer](
       logOffsets: Future[Map[TopicPartition, LogOffsets]],
       config: TopicLoaderConfig,
-      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]],
+      topicLoaderMetrics: TopicLoaderMetrics
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], Future[Consumer.Control]] = {
 
     def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[ConsumerRecord[K, V], Consumer.Control] = {
@@ -177,14 +178,23 @@ trait TopicLoader extends LazyLogging {
           .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
           .collect { case WithRecord(r) => r }
 
+      topicLoaderMetrics.onLoading()
+
       kafkaSource[K, V](lowestOffsets, config, maybeConsumerSettings)
         .idleTimeout(config.idleTimeout)
         .via(filterBelowHighestOffset)
+        .wireTap(topicLoaderMetrics.onRecord[K, V])
         .watchTermination() { case (mat, terminationF) =>
           terminationF.onComplete(
             _.fold(
-              logger.error(s"Error occurred while loading data from ${offsets.keys.show}", _),
-              _ => logger.info(s"Successfully loaded data from ${offsets.keys.show}")
+              {
+                topicLoaderMetrics.onError()
+                logger.error(s"Error occurred while loading data from ${offsets.keys.show}", _)
+              },
+              _ => {
+                topicLoaderMetrics.onLoaded()
+                logger.info(s"Successfully loaded data from ${offsets.keys.show}")
+              }
             )
           )(system.dispatcher)
           mat

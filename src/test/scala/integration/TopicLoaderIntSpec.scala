@@ -1,7 +1,6 @@
 package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
-
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.{Keep, Sink}
 import akka.stream.testkit.scaladsl.TestSink
@@ -13,6 +12,7 @@ import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
 import uk.sky.kafka.topicloader.*
+import utils.MockTopicLoaderMetrics
 
 import scala.concurrent.Future
 
@@ -141,6 +141,33 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
             loadedRecords
               .map(recordToTuple) should contain noElementsOf published
           }
+        }
+      }
+    }
+
+    "with custom metrics" should {
+
+      "emit metrics on a consumer record received" in new TestContext {
+
+        val mockTopicLoaderMetrics = new MockTopicLoaderMetrics()
+
+        val strategy               = LoadAll
+        val topics                 = NonEmptyList.of(testTopic1, testTopic2)
+        val allRecords             = records(1 to 15)
+        val (forTopic1, forTopic2) = allRecords.splitAt(10)
+
+        withRunningKafka {
+          createCustomTopics(topics)
+
+          publishToKafka(testTopic1, forTopic1)
+          publishToKafka(testTopic2, forTopic2)
+
+          TopicLoader
+            .load[String, String](topics, strategy, topicLoaderMetrics = mockTopicLoaderMetrics)
+            .runWith(Sink.seq)
+            .futureValue
+
+          mockTopicLoaderMetrics.recordCounter.get() shouldBe allRecords.length
         }
       }
     }
