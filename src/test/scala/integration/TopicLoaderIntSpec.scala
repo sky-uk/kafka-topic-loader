@@ -215,10 +215,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
           TopicLoader
             .load[String, String](NonEmptyList.one(testTopic1), strategy, topicLoaderMetrics = mockTopicLoaderMetrics)
-            .runWith(Sink.foreachAsync(1) { message =>
-              if (message.key == explodingKey) Future.failed(new Exception("Boom!"))
-              else Future.unit
-            })
+            .runWith(errorSink(explodingKey))
 
           eventually {
             mockTopicLoaderMetrics.loadingState.get() shouldBe ErrorLoading
@@ -281,10 +278,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
           TopicLoader
             .load[String, String](NonEmptyList.one(testTopic1), LoadAll)
-            .runWith(Sink.foreachAsync(1) { message =>
-              if (message.key == timingOutKey) Future.never
-              else Future.unit
-            })
+            .runWith(errorSink(timingOutKey, Future.never))
             .failed
             .futureValue shouldBe a[JavaTimeoutException]
         }
@@ -359,10 +353,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           val ((callback, _), _) =
             TopicLoader
               .loadAndRun[String, String](NonEmptyList.one(testTopic1), topicLoaderMetrics = mockTopicLoaderMetrics)
-              .toMat(Sink.foreachAsync(1) { message =>
-                if (message.key == explodingKey) Future.failed(new Exception("Boom!"))
-                else Future.unit
-              })(Keep.both)
+              .toMat(errorSink(explodingKey))(Keep.both)
               .run()
 
           eventually {
