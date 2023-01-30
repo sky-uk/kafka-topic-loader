@@ -179,12 +179,14 @@ trait TopicLoader extends LazyLogging {
           .takeWhile(_.partitionOffsets.nonEmpty, inclusive = true)
           .collect { case WithRecord(r) => r }
 
-      topicLoaderMetrics.onLoading()
-
       kafkaSource[K, V](lowestOffsets, config, maybeConsumerSettings)
         .idleTimeout(config.idleTimeout)
         .via(filterBelowHighestOffset)
         .wireTap(topicLoaderMetrics.onRecord[K, V])
+        .mapMaterializedValue { mat =>
+          topicLoaderMetrics.onLoading()
+          mat
+        }
         .watchTermination() { case (mat, terminationF) =>
           terminationF.onComplete(
             _.fold(
