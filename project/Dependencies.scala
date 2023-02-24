@@ -23,7 +23,7 @@ object Dependencies {
     val all             = Seq(core, kernal)
   }
 
-  val kafkaClients          = "org.apache.kafka"            % "kafka-clients"           % "3.3.2"
+  val kafkaClients          = "org.apache.kafka"            % "kafka-clients"           % "3.4.0"
   val scalaLogging          = "com.typesafe.scala-logging" %% "scala-logging"           % "3.9.5"
   val logbackClassic        = "ch.qos.logback"              % "logback-classic"         % "1.4.5" % Runtime
   val scalaCollectionCompat = "org.scala-lang.modules"     %% "scala-collection-compat" % "2.9.0"
