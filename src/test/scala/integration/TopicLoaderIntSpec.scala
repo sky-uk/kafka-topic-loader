@@ -15,7 +15,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
 import uk.sky.kafka.topicloader.*
 import utils.MockTopicLoaderMetrics
-import utils.MockTopicLoaderMetrics.{ErrorLoading, Loaded, Loading, NotStarted}
+import utils.MockTopicLoaderMetrics.{ErrorLoading, Loaded, Loading}
 
 import scala.concurrent.Future
 
