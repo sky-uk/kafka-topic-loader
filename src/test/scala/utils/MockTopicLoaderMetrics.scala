@@ -3,28 +3,34 @@ package utils
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.TopicPartition
 import uk.sky.kafka.topicloader.metrics.TopicLoaderMetrics
-import utils.MockTopicLoaderMetrics._
+import utils.MockTopicLoaderMetrics.*
+
+import scala.collection.concurrent.TrieMap
 
 class MockTopicLoaderMetrics extends TopicLoaderMetrics {
   val recordCounter = new AtomicInteger()
 
-  val loadingState = new AtomicReference[State](NotStarted)
+  val loadingState = TrieMap.empty[TopicPartition, State]
 
   override def onRecord[K, V](record: ConsumerRecord[K, V]): Unit = recordCounter.incrementAndGet()
 
-  override def onLoading(): Unit = loadingState.set(Loading)
+  override def onLoading(topicPartition: TopicPartition): Unit =
+    loadingState.put(topicPartition, Loading(topicPartition))
 
-  override def onLoaded(): Unit = loadingState.set(Loaded)
+  override def onLoaded(topicPartition: TopicPartition): Unit =
+    loadingState.put(topicPartition, Loaded(topicPartition))
 
-  override def onError(): Unit = loadingState.set(ErrorLoading)
+  override def onError(topicPartition: TopicPartition): Unit =
+    loadingState.put(topicPartition, ErrorLoading(topicPartition))
 }
 
 object MockTopicLoaderMetrics {
   sealed trait State extends Product with Serializable
 
-  case object NotStarted   extends State
-  case object Loading      extends State
-  case object Loaded       extends State
-  case object ErrorLoading extends State
+  case object NotStarted                                  extends State
+  case class Loading(topicPartition: TopicPartition)      extends State
+  case class Loaded(topicPartition: TopicPartition)       extends State
+  case class ErrorLoading(topicPartition: TopicPartition) extends State
 }

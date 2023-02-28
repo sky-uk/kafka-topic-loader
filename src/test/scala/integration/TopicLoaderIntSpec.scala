@@ -9,6 +9,7 @@ import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
+import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
@@ -177,12 +178,18 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       "emit a State of Loaded once the stream has completed" in new TestContext {
         val mockTopicLoaderMetrics = new MockTopicLoaderMetrics()
 
+        val partitions             = 2
         val topics                 = NonEmptyList.of(testTopic1, testTopic2)
         val allRecords             = records(1 to 15)
         val (forTopic1, forTopic2) = allRecords.splitAt(10)
 
+        val tps: Seq[TopicPartition] = for {
+          topic     <- topics.toList
+          partition <- 0 until partitions
+        } yield new TopicPartition(topic, partition)
+
         withRunningKafka {
-          createCustomTopics(topics)
+          createCustomTopics(topics, partitions)
 
           publishToKafka(testTopic1, forTopic1)
           publishToKafka(testTopic2, forTopic2)
@@ -191,14 +198,14 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
             TopicLoader
               .load[String, String](topics, strategy, topicLoaderMetrics = mockTopicLoaderMetrics)
 
-          mockTopicLoaderMetrics.loadingState.get() shouldBe NotStarted
+          mockTopicLoaderMetrics.loadingState shouldBe empty
 
           loadF.runWith(Sink.foreach { _ =>
-            mockTopicLoaderMetrics.loadingState.get() shouldBe Loading
+            tps.foreach(tp => mockTopicLoaderMetrics.loadingState.get(tp).value shouldBe Loading(tp))
           })
 
           eventually {
-            mockTopicLoaderMetrics.loadingState.get() shouldBe Loaded
+            tps.foreach(tp => mockTopicLoaderMetrics.loadingState.get(tp).value shouldBe Loaded(tp))
           }
         }
       }
@@ -209,8 +216,14 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
         val published    = records(1 to 10)
         val explodingKey = published.drop(5).head._1
 
+        val partitions = 2
+
+        val tps: Seq[TopicPartition] = for {
+          partition <- 0 until partitions
+        } yield new TopicPartition(testTopic1, partition)
+
         withRunningKafka {
-          createCustomTopic(testTopic1)
+          createCustomTopic(testTopic1, partitions = partitions)
           publishToKafka(testTopic1, published)
 
           TopicLoader
@@ -218,7 +231,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
             .runWith(errorSink(explodingKey))
 
           eventually {
-            mockTopicLoaderMetrics.loadingState.get() shouldBe ErrorLoading
+            tps.foreach(tp => mockTopicLoaderMetrics.loadingState.get(tp).value shouldBe ErrorLoading(tp))
           }
         }
       }
@@ -320,10 +333,15 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       "emit a State of Loaded when finished loading" in new TestContext {
         val mockTopicLoaderMetrics = new MockTopicLoaderMetrics()
 
-        val preLoad = records(1 to 15)
+        val partitions = 2
+        val preLoad    = records(1 to 15)
+
+        val tps: Seq[TopicPartition] = for {
+          partition <- 0 until partitions
+        } yield new TopicPartition(testTopic1, partition)
 
         withRunningKafka {
-          createCustomTopic(testTopic1)
+          createCustomTopic(testTopic1, partitions = partitions)
 
           publishToKafka(testTopic1, preLoad)
 
@@ -334,7 +352,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
               .run()
 
           whenReady(callback) { _ =>
-            mockTopicLoaderMetrics.loadingState.get() shouldBe Loaded
+            tps.foreach(tp => mockTopicLoaderMetrics.loadingState.get(tp).value shouldBe Loaded(tp))
           }
         }
       }
@@ -342,11 +360,16 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       "emit a State of Error if the initial loading callback fails" in new TestContext {
         val mockTopicLoaderMetrics = new MockTopicLoaderMetrics()
 
+        val partitions   = 2
         val preLoad      = records(1 to 15)
         val explodingKey = preLoad.drop(5).head._1
 
+        val tps: Seq[TopicPartition] = for {
+          partition <- 0 until partitions
+        } yield new TopicPartition(testTopic1, partition)
+
         withRunningKafka {
-          createCustomTopic(testTopic1)
+          createCustomTopic(testTopic1, partitions = partitions)
 
           publishToKafka(testTopic1, preLoad)
 
@@ -359,7 +382,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           eventually {
             callback.failed
 
-            mockTopicLoaderMetrics.loadingState.get() shouldBe ErrorLoading
+            tps.foreach(tp => mockTopicLoaderMetrics.loadingState.get(tp).value shouldBe ErrorLoading(tp))
           }
         }
       }

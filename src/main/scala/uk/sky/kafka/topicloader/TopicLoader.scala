@@ -168,6 +168,8 @@ trait TopicLoader extends LazyLogging {
     def topicDataSource(offsets: Map[TopicPartition, LogOffsets]): Source[ConsumerRecord[K, V], Consumer.Control] = {
       offsets.foreach { case (partition, offset) => logger.info(s"${offset.show} for $partition") }
 
+      val partitions = offsets.keys
+
       val nonEmptyOffsets   = offsets.filter { case (_, o) => o.highest > o.lowest }
       val lowestOffsets     = nonEmptyOffsets.map { case (p, o) => p -> o.lowest }
       val allHighestOffsets =
@@ -184,19 +186,19 @@ trait TopicLoader extends LazyLogging {
         .via(filterBelowHighestOffset)
         .wireTap(topicLoaderMetrics.onRecord[K, V])
         .mapMaterializedValue { mat =>
-          topicLoaderMetrics.onLoading()
+          partitions.foreach(topicLoaderMetrics.onLoading)
           mat
         }
         .watchTermination() { case (mat, terminationF) =>
           terminationF.onComplete(
             _.fold(
               e => {
-                logger.error(s"Error occurred while loading data from ${offsets.keys.show}", e)
-                topicLoaderMetrics.onError()
+                logger.error(s"Error occurred while loading data from ${partitions.show}", e)
+                partitions.foreach(topicLoaderMetrics.onError)
               },
               _ => {
-                logger.info(s"Successfully loaded data from ${offsets.keys.show}")
-                topicLoaderMetrics.onLoaded()
+                logger.info(s"Successfully loaded data from ${partitions.show}")
+                partitions.foreach(topicLoaderMetrics.onLoaded)
               }
             )
           )(system.dispatcher)
