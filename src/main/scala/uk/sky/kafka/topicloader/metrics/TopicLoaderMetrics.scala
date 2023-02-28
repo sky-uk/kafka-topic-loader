@@ -7,11 +7,11 @@ trait TopicLoaderMetrics {
 
   def onRecord[K, V](record: ConsumerRecord[K, V]): Unit
 
-  def onLoading(topicPartitions: TopicPartition): Unit
+  def onLoading(topicPartition: TopicPartition): Unit
 
-  def onLoaded(topicPartitions: TopicPartition): Unit
+  def onLoaded(topicPartition: TopicPartition): Unit
 
-  def onError(topicPartitions: TopicPartition): Unit
+  def onError(topicPartition: TopicPartition): Unit
 
 }
 
@@ -19,10 +19,10 @@ object TopicLoaderMetrics {
   def noOp(): TopicLoaderMetrics = new TopicLoaderMetrics {
     override def onRecord[K, V](record: ConsumerRecord[K, V]): Unit = ()
 
-    override def onLoading(topicPartitions: TopicPartition): Unit = ()
+    override def onLoading(topicPartition: TopicPartition): Unit = ()
 
-    override def onLoaded(topicPartitions: TopicPartition): Unit = ()
+    override def onLoaded(topicPartition: TopicPartition): Unit = ()
 
-    override def onError(topicPartitions: TopicPartition): Unit = ()
+    override def onError(topicPartition: TopicPartition): Unit = ()
   }
 }
