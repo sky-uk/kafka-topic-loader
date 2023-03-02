@@ -29,7 +29,6 @@ class MockTopicLoaderMetrics extends TopicLoaderMetrics {
 object MockTopicLoaderMetrics {
   sealed trait State extends Product with Serializable
 
-  case object NotStarted                                  extends State
   case class Loading(topicPartition: TopicPartition)      extends State
   case class Loaded(topicPartition: TopicPartition)       extends State
   case class ErrorLoading(topicPartition: TopicPartition) extends State
