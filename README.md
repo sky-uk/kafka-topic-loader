@@ -12,6 +12,8 @@ Since version `1.4.0` the library is cross compiled for scala versions `2.12` an
 
 Since version `1.6.0` the library is cross compiled for scala versions `2.12`, `2.13` and `3`.
 
+Since version `2.0.0` the library is no longer cross compiles for version `2.12`, and the package has been renamed from `com.sky` to `uk.sky`.
+
 Add the following to your `build.sbt`:
 
 ```scala
