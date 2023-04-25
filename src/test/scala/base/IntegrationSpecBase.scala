@@ -3,8 +3,10 @@ package base
 import java.time.Duration
 import java.util.UUID
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
+import akka.stream.scaladsl.Sink
 import akka.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option.*
@@ -19,6 +21,7 @@ import org.scalatest.Assertion
 import utils.RandomPort
 
 import scala.annotation.tailrec
+import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
 
@@ -95,6 +98,15 @@ abstract class IntegrationSpecBase extends UnitSpecBase {
       publishToKafka(topic, messages)
       publishToKafka(topic, filler)
     }
+
+    def errorSink[V](
+        errorKey: String,
+        onError: Future[Unit] = Future.failed(new Exception("Boom!"))
+    ): Sink[ConsumerRecord[String, V], Future[Done]] =
+      Sink.foreachAsync[ConsumerRecord[String, V]](1) { message =>
+        if (message.key == errorKey) onError
+        else Future.unit
+      }
   }
 
   trait KafkaConsumer { this: TestContext =>
