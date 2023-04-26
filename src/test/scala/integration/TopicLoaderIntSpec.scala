@@ -1,6 +1,7 @@
 package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
+
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.stream.scaladsl.{Keep, Sink}
@@ -152,7 +153,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
       "Override default settings" in new TestContext {
         override implicit lazy val system: ActorSystem = ActorSystem("test-actor-system")
 
-        val port = RandomPort()
+        val port                                                    = RandomPort()
         override implicit lazy val kafkaConfig: EmbeddedKafkaConfig =
           EmbeddedKafkaConfig(kafkaPort = port, zooKeeperPort = RandomPort(), Map("log.roll.ms" -> "10"))
 
@@ -161,9 +162,10 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           createCustomTopics(topics)
           publishToKafka(testTopic1, records(1 to 10))
 
-          val consumerSettings = ConsumerSettings.create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+          val consumerSettings = ConsumerSettings
+            .create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
             .withBootstrapServers(s"localhost:$port")
-          val loadedRecords = TopicLoader
+          val loadedRecords    = TopicLoader
             .load(topics, LoadAll, Some(consumerSettings))
             .runWith(Sink.seq)
             .futureValue
