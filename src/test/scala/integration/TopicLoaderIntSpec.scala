@@ -10,14 +10,12 @@ import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
-import io.github.embeddedkafka.EmbeddedKafkaConfig
 import org.apache.kafka.common.KafkaException
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
 import uk.sky.kafka.topicloader.*
-import utils.RandomPort
 
 import scala.concurrent.Future
 
