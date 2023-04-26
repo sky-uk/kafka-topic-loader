@@ -1,7 +1,6 @@
 package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
-
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import akka.stream.scaladsl.{Keep, Sink}
@@ -11,6 +10,7 @@ import cats.data.NonEmptyList
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import io.github.embeddedkafka.EmbeddedKafkaConfig
+import org.apache.kafka.common.KafkaException
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks.*
@@ -151,7 +151,6 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
     "Kafka consumer settings" should {
       "Override default settings" in new TestContext {
-        override implicit lazy val system: ActorSystem = ActorSystem("test-actor-system")
 
         val port                                                    = RandomPort()
         override implicit lazy val kafkaConfig: EmbeddedKafkaConfig =
@@ -164,12 +163,12 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
           val consumerSettings = ConsumerSettings
             .create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
-            .withBootstrapServers(s"localhost:$port")
-          val loadedRecords    = TopicLoader
+            .withBootstrapServers("invalid")
+          TopicLoader
             .load(topics, LoadAll, Some(consumerSettings))
             .runWith(Sink.seq)
-            .futureValue
-          loadedRecords.map(recordToTuple).size shouldBe 10
+            .failed
+            .futureValue shouldBe a[KafkaException]
         }
       }
     }
