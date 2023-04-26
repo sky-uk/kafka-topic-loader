@@ -153,10 +153,6 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
     "Kafka consumer settings" should {
 
       "Override default settings" in new TestContext {
-        val port                                                    = RandomPort()
-        override implicit lazy val kafkaConfig: EmbeddedKafkaConfig =
-          EmbeddedKafkaConfig(kafkaPort = port, zooKeeperPort = RandomPort(), Map("log.roll.ms" -> "10"))
-
         withRunningKafka {
           val consumerSettings = ConsumerSettings
             .create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
