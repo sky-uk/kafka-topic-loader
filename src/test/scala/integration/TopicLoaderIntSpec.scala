@@ -1,18 +1,21 @@
 package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
-
 import akka.actor.ActorSystem
+import akka.kafka.ConsumerSettings
 import akka.stream.scaladsl.{Keep, Sink}
 import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
+import io.github.embeddedkafka.EmbeddedKafkaConfig
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
+import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
 import uk.sky.kafka.topicloader.*
+import utils.RandomPort
 
 import scala.concurrent.Future
 
@@ -141,6 +144,30 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
             loadedRecords
               .map(recordToTuple) should contain noElementsOf published
           }
+        }
+      }
+    }
+
+    "Kafka consumer settings" should {
+      "Override default settings" in new TestContext {
+        override implicit lazy val system: ActorSystem = ActorSystem("test-actor-system")
+
+        val port = RandomPort()
+        override implicit lazy val kafkaConfig: EmbeddedKafkaConfig =
+          EmbeddedKafkaConfig(kafkaPort = port, zooKeeperPort = RandomPort(), Map("log.roll.ms" -> "10"))
+
+        withRunningKafka {
+          val topics = NonEmptyList.one(testTopic1)
+          createCustomTopics(topics)
+          publishToKafka(testTopic1, records(1 to 10))
+
+          val consumerSettings = ConsumerSettings.create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+            .withBootstrapServers(s"localhost:$port")
+          val loadedRecords = TopicLoader
+            .load(topics, LoadAll, Some(consumerSettings))
+            .runWith(Sink.seq)
+            .futureValue
+          loadedRecords.map(recordToTuple).size shouldBe 10
         }
       }
     }
