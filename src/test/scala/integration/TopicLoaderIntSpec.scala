@@ -151,23 +151,22 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
     "Kafka consumer settings" should {
 
-      "Override default settings" in new TestContext {
-        try {
-          val secondKafkaConfig = EmbeddedKafkaConfig(kafkaPort = RandomPort(), zooKeeperPort = RandomPort())
-          val secondKafka       = EmbeddedKafka.start()(secondKafkaConfig)
+      "Override default settings and be passed through everywhere" in new TestContext {
+        val secondKafkaConfig = EmbeddedKafkaConfig(kafkaPort = RandomPort(), zooKeeperPort = RandomPort())
+        val secondKafka       = EmbeddedKafka.start()(secondKafkaConfig)
 
-          createCustomTopic(testTopic1)(secondKafkaConfig)
-          publishToKafka(testTopic1, records(1 to 10))(secondKafkaConfig, new StringSerializer, new StringSerializer)
+        createCustomTopic(testTopic1)(secondKafkaConfig)
+        publishToKafka(testTopic1, records(1 to 10))(secondKafkaConfig, new StringSerializer, new StringSerializer)
 
-          val consumerSettings = ConsumerSettings
-            .create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
-            .withBootstrapServers(s"localhost:${secondKafka.config.kafkaPort}")
-          val loadedRecords    = TopicLoader
-            .load[String, String](NonEmptyList.one(testTopic1), LoadAll, Some(consumerSettings))
-            .runWith(Sink.seq)
-            .futureValue
-          loadedRecords.size shouldBe 10
-        } finally EmbeddedKafka.stop()
+        val consumerSettings = ConsumerSettings
+          .create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+          .withBootstrapServers(s"localhost:${secondKafka.config.kafkaPort}")
+        val loadedRecords    = TopicLoader
+          .load[String, String](NonEmptyList.one(testTopic1), LoadAll, Some(consumerSettings))
+          .runWith(Sink.seq)
+          .futureValue
+        loadedRecords.size shouldBe 10
+        EmbeddedKafka.stop(secondKafka)
       }
     }
 
