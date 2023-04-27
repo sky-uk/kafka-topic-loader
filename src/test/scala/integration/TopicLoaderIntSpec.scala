@@ -10,12 +10,13 @@ import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
-import org.apache.kafka.common.KafkaException
+import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
-import org.apache.kafka.common.serialization.ByteArrayDeserializer
+import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringSerializer}
 import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
 import uk.sky.kafka.topicloader.*
+import utils.RandomPort
 
 import scala.concurrent.Future
 
@@ -151,16 +152,22 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
     "Kafka consumer settings" should {
 
       "Override default settings" in new TestContext {
-        withRunningKafka {
+        try {
+          val secondKafkaConfig = EmbeddedKafkaConfig(kafkaPort = RandomPort(), zooKeeperPort = RandomPort())
+          val secondKafka       = EmbeddedKafka.start()(secondKafkaConfig)
+
+          createCustomTopic(testTopic1)(secondKafkaConfig)
+          publishToKafka(testTopic1, records(1 to 10))(secondKafkaConfig, new StringSerializer, new StringSerializer)
+
           val consumerSettings = ConsumerSettings
             .create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
-            .withBootstrapServers("invalid")
-          TopicLoader
-            .load(NonEmptyList.one(testTopic1), LoadAll, Some(consumerSettings))
+            .withBootstrapServers(s"localhost:${secondKafka.config.kafkaPort}")
+          val loadedRecords    = TopicLoader
+            .load[String, String](NonEmptyList.one(testTopic1), LoadAll, Some(consumerSettings))
             .runWith(Sink.seq)
-            .failed
-            .futureValue shouldBe a[KafkaException]
-        }
+            .futureValue
+          loadedRecords.size shouldBe 10
+        } finally EmbeddedKafka.stop()
       }
     }
 
