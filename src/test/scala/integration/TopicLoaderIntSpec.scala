@@ -11,7 +11,6 @@ import cats.data.NonEmptyList
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
-import org.apache.kafka.common.KafkaException
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringSerializer}
 import org.scalatest.prop.TableDrivenPropertyChecks.*
@@ -152,17 +151,19 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
 
     "Kafka consumer settings" should {
 
-      "Override default settings" in new TestContext {
+      "Override default settings and run two topic loaders on different cluster" in new TestContext {
         val topics                 = NonEmptyList.of(testTopic1, testTopic2)
         val (forTopic1, forTopic2) = records(1 to 15).splitAt(10)
-        val secondKafkaConfig      = EmbeddedKafkaConfig(RandomPort(), RandomPort())
         val stringSerializer       = new StringSerializer
 
+        val secondKafkaConfig = EmbeddedKafkaConfig(RandomPort(), RandomPort())
+        val consumerSettings  = ConsumerSettings
+          .create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+          .withBootstrapServers(s"localhost:${secondKafkaConfig.kafkaPort}")
+
         EmbeddedKafka.start()(secondKafkaConfig)
+
         withRunningKafka {
-          val consumerSettings = ConsumerSettings
-            .create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
-            .withBootstrapServers(s"localhost:${secondKafkaConfig.kafkaPort}")
 
           createCustomTopics(topics)
           createCustomTopics(topics)(secondKafkaConfig)
