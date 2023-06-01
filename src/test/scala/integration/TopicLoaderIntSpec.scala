@@ -3,16 +3,20 @@ package integration
 import java.util.concurrent.TimeoutException as JavaTimeoutException
 
 import akka.actor.ActorSystem
+import akka.kafka.ConsumerSettings
 import akka.stream.scaladsl.{Keep, Sink}
 import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.typesafe.config.ConfigFactory
 import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
+import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
+import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringSerializer}
 import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
 import uk.sky.kafka.topicloader.*
+import utils.RandomPort
 
 import scala.concurrent.Future
 
@@ -142,6 +146,40 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
               .map(recordToTuple) should contain noElementsOf published
           }
         }
+      }
+    }
+
+    "Kafka consumer settings" should {
+
+      "Override default settings and run two topic loaders on different cluster" in new TestContext {
+        val topics                 = NonEmptyList.of(testTopic1, testTopic2)
+        val (forTopic1, forTopic2) = records(1 to 15).splitAt(10)
+        val stringSerializer       = new StringSerializer
+
+        val secondKafkaConfig = EmbeddedKafkaConfig(RandomPort(), RandomPort())
+        val consumerSettings  = ConsumerSettings
+          .create(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
+          .withBootstrapServers(s"localhost:${secondKafkaConfig.kafkaPort}")
+
+        EmbeddedKafka.start()(secondKafkaConfig)
+
+        withRunningKafka {
+
+          createCustomTopics(topics)
+          createCustomTopics(topics)(secondKafkaConfig)
+
+          publishToKafka(testTopic1, forTopic1)(secondKafkaConfig, stringSerializer, stringSerializer)
+          publishToKafka(testTopic2, forTopic2)(secondKafkaConfig, stringSerializer, stringSerializer)
+
+          val loadedRecords       = TopicLoader.load[String, String](topics, LoadAll).runWith(Sink.seq).futureValue
+          val secondLoadedRecords =
+            TopicLoader.load[String, String](topics, LoadAll, Some(consumerSettings)).runWith(Sink.seq).futureValue
+
+          loadedRecords.map(recordToTuple) shouldBe empty
+          secondLoadedRecords.map(recordToTuple) should contain theSameElementsAs (forTopic1 ++ forTopic2)
+        }
+
+        EmbeddedKafka.stop()
       }
     }
 
