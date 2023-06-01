@@ -82,8 +82,10 @@ abstract class IntegrationSpecBase extends UnitSpecBase {
     val testTopic2          = "load-state-topic-2"
     val testTopicPartitions = 5
 
-    def createCustomTopics(topics: NonEmptyList[String], partitions: Int = testTopicPartitions): Unit =
-      topics.toList.foreach(createCustomTopic(_, partitions = partitions))
+    def createCustomTopics(topics: NonEmptyList[String], partitions: Int = testTopicPartitions)(implicit
+        config: EmbeddedKafkaConfig
+    ): Unit =
+      topics.toList.foreach(createCustomTopic(_, partitions = partitions)(config))
 
     /*
      * Note: Compaction is only triggered if messages are published as a separate statement.

@@ -80,7 +80,7 @@ trait TopicLoader extends LazyLogging {
       Config
         .loadOrThrow(system.settings.config)
         .topicLoader
-    load(logOffsetsForTopics(topics, strategy, config), config, maybeConsumerSettings)
+    load(logOffsetsForTopics(topics, strategy, config, maybeConsumerSettings), config, maybeConsumerSettings)
   }
 
   /** Source that loads the specified topics from the beginning. When the latest current offsets are reached, the
@@ -91,7 +91,7 @@ trait TopicLoader extends LazyLogging {
       maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]] = None
   )(implicit system: ActorSystem): Source[ConsumerRecord[K, V], (Future[Done], Future[Consumer.Control])] = {
     val config            = Config.loadOrThrow(system.settings.config).topicLoader
-    val logOffsetsF       = logOffsetsForTopics(topics, LoadAll, config)
+    val logOffsetsF       = logOffsetsForTopics(topics, LoadAll, config, maybeConsumerSettings)
     val postLoadingSource = Source.futureSource(logOffsetsF.map { logOffsets =>
       val highestOffsets = logOffsets.map { case (p, o) => p -> o.highest }
       kafkaSource[K, V](highestOffsets, config, maybeConsumerSettings)
@@ -105,16 +105,18 @@ trait TopicLoader extends LazyLogging {
   protected def logOffsetsForPartitions(
       topicPartitions: NonEmptyList[TopicPartition],
       strategy: LoadTopicStrategy,
-      config: TopicLoaderConfig
+      config: TopicLoaderConfig,
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
   )(implicit
       system: ActorSystem
   ): Future[Map[TopicPartition, LogOffsets]] =
-    fetchLogOffsets(_ => topicPartitions.toList, strategy, config)
+    fetchLogOffsets(_ => topicPartitions.toList, strategy, config, maybeConsumerSettings)
 
   protected def logOffsetsForTopics(
       topics: NonEmptyList[String],
       strategy: LoadTopicStrategy,
-      config: TopicLoaderConfig
+      config: TopicLoaderConfig,
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
   )(implicit
       system: ActorSystem
   ): Future[Map[TopicPartition, LogOffsets]] = {
@@ -123,13 +125,14 @@ trait TopicLoader extends LazyLogging {
         t <- topics.toList
         p <- c.partitionsFor(t).asScala
       } yield new TopicPartition(t, p.partition)
-    fetchLogOffsets(partitionsFromTopics, strategy, config)
+    fetchLogOffsets(partitionsFromTopics, strategy, config, maybeConsumerSettings)
   }
 
   private def fetchLogOffsets(
       f: Consumer[Array[Byte], Array[Byte]] => List[TopicPartition],
       strategy: LoadTopicStrategy,
-      config: TopicLoaderConfig
+      config: TopicLoaderConfig,
+      maybeConsumerSettings: Option[ConsumerSettings[Array[Byte], Array[Byte]]]
   )(implicit system: ActorSystem): Future[Map[TopicPartition, LogOffsets]] = {
     def earliestOffsets(
         consumer: Consumer[Array[Byte], Array[Byte]],
@@ -142,7 +145,7 @@ trait TopicLoader extends LazyLogging {
     import system.dispatcher
 
     Future {
-      withStandaloneConsumer(consumerSettings(None, config)) { c =>
+      withStandaloneConsumer(consumerSettings(maybeConsumerSettings, config)) { c =>
         val offsets          = offsetsFrom(f(c)) _
         val beginningOffsets = offsets(c.beginningOffsets)
         val endOffsets       = strategy match {
