@@ -1,7 +1,7 @@
 package unit
 
-import akka.actor.ActorSystem
-import akka.kafka.ConsumerSettings
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.ConsumerSettings
 import base.UnitSpecBase
 import cats.implicits.*
 import com.typesafe.config.{ConfigException, ConfigFactory}

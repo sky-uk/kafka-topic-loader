@@ -3,12 +3,12 @@ package uk.sky.kafka.topicloader
 import java.lang.Long as JLong
 import java.util.{List as JList, Map as JMap, Optional}
 
-import akka.Done
-import akka.actor.ActorSystem
-import akka.kafka.scaladsl.Consumer
-import akka.kafka.{ConsumerSettings, Subscriptions}
-import akka.stream.OverflowStrategy
-import akka.stream.scaladsl.{Flow, Keep, Source}
+import org.apache.pekko.Done
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.scaladsl.Consumer
+import org.apache.pekko.kafka.{ConsumerSettings, Subscriptions}
+import org.apache.pekko.stream.OverflowStrategy
+import org.apache.pekko.stream.scaladsl.{Flow, Keep, Source}
 import cats.data.NonEmptyList
 import cats.syntax.bifunctor.*
 import cats.syntax.option.*

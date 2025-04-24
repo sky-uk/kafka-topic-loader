@@ -3,9 +3,9 @@ package base
 import java.time.Duration
 import java.util.UUID
 
-import akka.actor.ActorSystem
-import akka.kafka.ConsumerSettings
-import akka.util.Timeout
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.ConsumerSettings
+import org.apache.pekko.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option.*
 import com.typesafe.config.ConfigFactory
@@ -28,7 +28,7 @@ abstract class IntegrationSpecBase extends UnitSpecBase {
 
   implicit val timeout: Timeout = Timeout(5.seconds)
 
-  trait TestContext extends AkkaSpecBase with EmbeddedKafka {
+  trait TestContext extends PekkoSpecBase with EmbeddedKafka {
 
     implicit lazy val kafkaConfig: EmbeddedKafkaConfig =
       EmbeddedKafkaConfig(kafkaPort = RandomPort(), zooKeeperPort = RandomPort(), Map("log.roll.ms" -> "10"))

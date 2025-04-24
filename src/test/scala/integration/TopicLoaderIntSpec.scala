@@ -2,10 +2,10 @@ package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
 
-import akka.actor.ActorSystem
-import akka.kafka.ConsumerSettings
-import akka.stream.scaladsl.{Keep, Sink}
-import akka.stream.testkit.scaladsl.TestSink
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.ConsumerSettings
+import org.apache.pekko.stream.scaladsl.{Keep, Sink}
+import org.apache.pekko.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.typesafe.config.ConfigFactory
