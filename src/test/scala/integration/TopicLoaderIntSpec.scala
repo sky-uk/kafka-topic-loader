@@ -190,7 +190,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           "test-actor-system",
           ConfigFactory.parseString(
             """
-            |akka.kafka.consumer.kafka-clients {
+            |pekko.kafka.consumer.kafka-clients {
             |  bootstrap.servers = "localhost:6001"
             |  request.timeout.ms = 700
             |  fetch.max.wait.ms = 500
@@ -219,7 +219,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
                |topic-loader {
                |  idle-timeout = 1 second
                |}
-               |akka.kafka.consumer {
+               |pekko.kafka.consumer {
                |  kafka-clients {
                |    bootstrap.servers = "localhost:${kafkaConfig.kafkaPort}"
                |  }

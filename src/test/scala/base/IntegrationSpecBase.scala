@@ -41,7 +41,7 @@ abstract class IntegrationSpecBase extends UnitSpecBase {
            |  idle-timeout = 5 minutes
            |  buffer-size = 1000
            |}
-           |akka {
+           |pekko {
            |  loglevel = "OFF"
            |  kafka {
            |    consumer {
