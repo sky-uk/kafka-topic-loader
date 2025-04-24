@@ -2,10 +2,6 @@ package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
 
-import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.kafka.ConsumerSettings
-import org.apache.pekko.stream.scaladsl.{Keep, Sink}
-import org.apache.pekko.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.typesafe.config.ConfigFactory
@@ -13,6 +9,10 @@ import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringSerializer}
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.ConsumerSettings
+import org.apache.pekko.stream.scaladsl.{Keep, Sink}
+import org.apache.pekko.stream.testkit.scaladsl.TestSink
 import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
 import uk.sky.kafka.topicloader.*

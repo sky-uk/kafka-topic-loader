@@ -3,9 +3,6 @@ package base
 import java.time.Duration
 import java.util.UUID
 
-import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.kafka.ConsumerSettings
-import org.apache.pekko.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option.*
 import com.typesafe.config.ConfigFactory
@@ -15,6 +12,9 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord, ConsumerRecords}
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.ConsumerSettings
+import org.apache.pekko.util.Timeout
 import org.scalatest.Assertion
 import utils.RandomPort
 

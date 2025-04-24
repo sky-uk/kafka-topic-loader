@@ -3,12 +3,6 @@ package uk.sky.kafka.topicloader
 import java.lang.Long as JLong
 import java.util.{List as JList, Map as JMap, Optional}
 
-import org.apache.pekko.Done
-import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.kafka.scaladsl.Consumer
-import org.apache.pekko.kafka.{ConsumerSettings, Subscriptions}
-import org.apache.pekko.stream.OverflowStrategy
-import org.apache.pekko.stream.scaladsl.{Flow, Keep, Source}
 import cats.data.NonEmptyList
 import cats.syntax.bifunctor.*
 import cats.syntax.option.*
@@ -18,6 +12,12 @@ import com.typesafe.scalalogging.LazyLogging
 import org.apache.kafka.clients.consumer.*
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.*
+import org.apache.pekko.Done
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.scaladsl.Consumer
+import org.apache.pekko.kafka.{ConsumerSettings, Subscriptions}
+import org.apache.pekko.stream.OverflowStrategy
+import org.apache.pekko.stream.scaladsl.{Flow, Keep, Source}
 import uk.sky.kafka.topicloader.config.{Config, TopicLoaderConfig}
 
 import scala.concurrent.Future

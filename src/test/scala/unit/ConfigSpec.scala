@@ -1,12 +1,12 @@
 package unit
 
-import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.kafka.ConsumerSettings
 import base.UnitSpecBase
 import cats.implicits.*
 import com.typesafe.config.{ConfigException, ConfigFactory}
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.ConsumerSettings
 import uk.sky.kafka.topicloader.TopicLoader.consumerSettings
 import uk.sky.kafka.topicloader.config.Config
 
