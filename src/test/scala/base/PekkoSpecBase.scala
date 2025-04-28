@@ -1,13 +1,13 @@
 package base
 
-import akka.testkit.{TestKit, TestKitBase}
+import org.apache.pekko.testkit.{TestKit, TestKitBase}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{BeforeAndAfterAll, Suite}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.DurationInt
 
-abstract class AkkaSpecBase extends TestKitBase with Suite with BeforeAndAfterAll with Matchers {
+abstract class PekkoSpecBase extends TestKitBase with Suite with BeforeAndAfterAll with Matchers {
 
   implicit lazy val ec: ExecutionContext = system.dispatcher
 

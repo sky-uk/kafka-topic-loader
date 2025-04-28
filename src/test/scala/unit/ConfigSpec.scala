@@ -1,12 +1,12 @@
 package unit
 
-import akka.actor.ActorSystem
-import akka.kafka.ConsumerSettings
 import base.UnitSpecBase
 import cats.implicits.*
 import com.typesafe.config.{ConfigException, ConfigFactory}
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.ConsumerSettings
 import uk.sky.kafka.topicloader.TopicLoader.consumerSettings
 import uk.sky.kafka.topicloader.config.Config
 
@@ -49,7 +49,7 @@ class ConfigSpec extends UnitSpecBase {
       result.properties.get("test") shouldBe None
     }
 
-    "use the config client ID over the akka client ID" in {
+    "use the config client ID over the pekko client ID" in {
       implicit val system: ActorSystem = ActorSystem(
         "test-actor-system",
         ConfigFactory.parseString(
@@ -59,7 +59,7 @@ class ConfigSpec extends UnitSpecBase {
              |  buffer-size = 10
              |  client-id = test-client-id
              |}
-             |akka.kafka.consumer.kafka-clients.client.id = akka-client-id
+             |pekko.kafka.consumer.kafka-clients.client.id = pekko-client-id
              """.stripMargin
         )
       )
@@ -71,7 +71,7 @@ class ConfigSpec extends UnitSpecBase {
       result.properties(ConsumerConfig.CLIENT_ID_CONFIG) shouldBe "test-client-id"
     }
 
-    "use the akka client ID if no client ID is specified" in {
+    "use the pekko client ID if no client ID is specified" in {
       implicit val system: ActorSystem = ActorSystem(
         "test-actor-system",
         ConfigFactory.parseString(
@@ -80,7 +80,7 @@ class ConfigSpec extends UnitSpecBase {
              |  idle-timeout = 1 second
              |  buffer-size = 10
              |}
-             |akka.kafka.consumer.kafka-clients.client.id = akka-client-id
+             |pekko.kafka.consumer.kafka-clients.client.id = pekko-client-id
              """.stripMargin
         )
       )
@@ -89,7 +89,7 @@ class ConfigSpec extends UnitSpecBase {
 
       val result: ConsumerSettings[Array[Byte], Array[Byte]] = consumerSettings(None, config.topicLoader)
 
-      result.properties(ConsumerConfig.CLIENT_ID_CONFIG) shouldBe "akka-client-id"
+      result.properties(ConsumerConfig.CLIENT_ID_CONFIG) shouldBe "pekko-client-id"
     }
   }
 

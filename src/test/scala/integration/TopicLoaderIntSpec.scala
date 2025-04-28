@@ -2,10 +2,6 @@ package integration
 
 import java.util.concurrent.TimeoutException as JavaTimeoutException
 
-import akka.actor.ActorSystem
-import akka.kafka.ConsumerSettings
-import akka.stream.scaladsl.{Keep, Sink}
-import akka.stream.testkit.scaladsl.TestSink
 import base.IntegrationSpecBase
 import cats.data.NonEmptyList
 import com.typesafe.config.ConfigFactory
@@ -13,6 +9,10 @@ import io.github.embeddedkafka.Codecs.{stringDeserializer, stringSerializer}
 import io.github.embeddedkafka.{EmbeddedKafka, EmbeddedKafkaConfig}
 import org.apache.kafka.common.errors.TimeoutException as KafkaTimeoutException
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, StringSerializer}
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.ConsumerSettings
+import org.apache.pekko.stream.scaladsl.{Keep, Sink}
+import org.apache.pekko.stream.testkit.scaladsl.TestSink
 import org.scalatest.prop.TableDrivenPropertyChecks.*
 import org.scalatest.prop.Tables.Table
 import uk.sky.kafka.topicloader.*
@@ -190,7 +190,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
           "test-actor-system",
           ConfigFactory.parseString(
             """
-            |akka.kafka.consumer.kafka-clients {
+            |pekko.kafka.consumer.kafka-clients {
             |  bootstrap.servers = "localhost:6001"
             |  request.timeout.ms = 700
             |  fetch.max.wait.ms = 500
@@ -219,7 +219,7 @@ class TopicLoaderIntSpec extends IntegrationSpecBase {
                |topic-loader {
                |  idle-timeout = 1 second
                |}
-               |akka.kafka.consumer {
+               |pekko.kafka.consumer {
                |  kafka-clients {
                |    bootstrap.servers = "localhost:${kafkaConfig.kafkaPort}"
                |  }

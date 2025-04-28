@@ -28,7 +28,7 @@ implicit val as: ActorSystem = ActorSystem()
 implicit val stringDeserializer: Deserializer[String] = new StringDeserializer
 
 val stream = TopicLoader.load[String, String](NonEmptyList.one("topic-to-load"), LoadAll)
-      .mapAsync(1)(_ => ??? /* store records in akka.Actor for example */)
+      .mapAsync(1)(_ => ??? /* store records in pekko.Actor for example */)
       .runWith(Sink.ignore)
 ```
 
@@ -78,7 +78,7 @@ class SimplifiedState {
 
 The config in [`reference.conf`](src/main/resources/reference.conf) can be overridden by providing your own `application.conf`.
 
-By default, Akka's `ConsumerConfig` will inherit the consumer `client.id` from the application kafka-topic-loader is running from. To separate the client id of your application and the kafka-topic-loader, provide it in your `application.conf`:
+By default, Pekko's `ConsumerConfig` will inherit the consumer `client.id` from the application kafka-topic-loader is running from. To separate the client id of your application and the kafka-topic-loader, provide it in your `application.conf`:
 
 ```hocon
 topic-loader {
@@ -86,12 +86,12 @@ topic-loader {
 }
 ```
 
-### Akka-kafka
+### Pekko-kafka
 
-You should configure the `akka.kafka.consumer.kafka-clients.group.id` to match that of your application, e.g.:
+You should configure the `pekko.kafka.consumer.kafka-clients.group.id` to match that of your application, e.g.:
 
 ```hocon
-akka.kafka {
+pekko.kafka {
   consumer.kafka-clients {
     bootstrap.servers = ${?KAFKA_BROKERS}
     group.id = assembler-consumer-group
@@ -107,7 +107,7 @@ akka.kafka {
 This is deprecated in favour of a new API for partitioned loading which is coming soon.
 
 Data can also be loaded from specific partitions using `fromPartitions`. By loading from specific partitions the topic
-loader can be used by multiple application instances with separate streams per set of partitions (see [Alpakka kafka](https://doc.akka.io/docs/akka-stream-kafka/current/consumer.html#source-per-partition) and below).
+loader can be used by multiple application instances with separate streams per set of partitions (see [Pekko Connectors kafka](https://pekko.apache.org/docs/pekko-connectors-kafka/current/consumer.html#source-per-partition) and below).
 
 ```scala
 implicit val system = ActorSystem()

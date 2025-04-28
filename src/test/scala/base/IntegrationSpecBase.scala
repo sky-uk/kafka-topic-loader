@@ -3,9 +3,6 @@ package base
 import java.time.Duration
 import java.util.UUID
 
-import akka.actor.ActorSystem
-import akka.kafka.ConsumerSettings
-import akka.util.Timeout
 import cats.data.NonEmptyList
 import cats.syntax.option.*
 import com.typesafe.config.ConfigFactory
@@ -15,6 +12,9 @@ import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.{Consumer, ConsumerConfig, ConsumerRecord, ConsumerRecords}
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.kafka.ConsumerSettings
+import org.apache.pekko.util.Timeout
 import org.scalatest.Assertion
 import utils.RandomPort
 
@@ -28,7 +28,7 @@ abstract class IntegrationSpecBase extends UnitSpecBase {
 
   implicit val timeout: Timeout = Timeout(5.seconds)
 
-  trait TestContext extends AkkaSpecBase with EmbeddedKafka {
+  trait TestContext extends PekkoSpecBase with EmbeddedKafka {
 
     implicit lazy val kafkaConfig: EmbeddedKafkaConfig =
       EmbeddedKafkaConfig(kafkaPort = RandomPort(), zooKeeperPort = RandomPort(), Map("log.roll.ms" -> "10"))
@@ -41,7 +41,7 @@ abstract class IntegrationSpecBase extends UnitSpecBase {
            |  idle-timeout = 5 minutes
            |  buffer-size = 1000
            |}
-           |akka {
+           |pekko {
            |  loglevel = "OFF"
            |  kafka {
            |    consumer {
